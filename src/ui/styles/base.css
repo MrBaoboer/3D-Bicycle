@@ -83,6 +83,10 @@ svg { display: block; }
   font-feature-settings: "tnum" 1;
 }
 
+/*
+ * 减少动效。三维那一侧 CSS 管不到（方向箭头的呼吸、镜头缓动都是 JS 驱动的），
+ * 由各自读 util/tween.js 的 reducedMotion() 自行处理。
+ */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 1ms !important;
@@ -90,7 +94,4 @@ svg { display: block; }
     transition-duration: 1ms !important;
     scroll-behavior: auto !important;
   }
-  /* 呼吸动画被掐成一帧后会停在关键帧末尾（0.55 不透明），而这一枚箭头是
-     「往哪儿使劲」的唯一答案，必须实打实地看得见 */
-  .arrow { opacity: 1; }
 }

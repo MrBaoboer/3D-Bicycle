@@ -1,45 +1,10 @@
-/* 全局骨架。界面令牌与组件在 ui/styles/ 下，这里只管画布与封面。 */
-
-:root {
-  color-scheme: light dark;
-  --edge: 16px;
-  --sa-top: env(safe-area-inset-top, 0px);
-  --sa-bottom: env(safe-area-inset-bottom, 0px);
-  --sa-left: env(safe-area-inset-left, 0px);
-  --sa-right: env(safe-area-inset-right, 0px);
-  --pad-top: calc(var(--edge) + var(--sa-top));
-  --pad-bottom: calc(var(--edge) + var(--sa-bottom));
-  --pad-left: calc(var(--edge) + var(--sa-left));
-  --pad-right: calc(var(--edge) + var(--sa-right));
-
-  --ink: #1b1d21;
-  --ink-2: #5b6068;
-  --paper: #eceef2;
-  --line: rgba(27, 29, 33, 0.14);
-  --accent: #d8642a;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --ink: #e8eaee;
-    --ink-2: #9aa1ab;
-    --paper: #14161a;
-    --line: rgba(232, 234, 238, 0.16);
-  }
-}
-
-* { box-sizing: border-box; }
-
-html, body {
-  margin: 0;
-  height: 100%;
-  overflow: hidden;
-  background: var(--paper);
-  color: var(--ink);
-  font: 400 16px/1.6 system-ui, -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
-  -webkit-font-smoothing: antialiased;
-  overscroll-behavior: none;
-}
+/*
+ * 画布与封面。
+ *
+ * 设计令牌一概不在这里定义 —— 早先这份文件自带一套 --ink / --paper / --accent，
+ * 与 ui/styles/tokens.css 同名不同值，靠 import 顺序决定谁赢，
+ * 改了主题色发现只有一半地方跟着变。令牌只有 tokens.css 那一处。
+ */
 
 #stage {
   position: fixed;
@@ -51,82 +16,110 @@ html, body {
   touch-action: none;
 }
 
-/* ── 封面 ── */
+/* ══════════════ 封面 ══════════════ */
+
+/*
+ * 三维就绪之前挡在前面。一台十二兆的整车要读几秒，
+ * 这几秒里必须有人告诉你在等什么、还剩多少。
+ */
 #cover {
   position: fixed;
   inset: 0;
   z-index: 90;
   display: grid;
   place-items: center;
-  background: var(--paper);
-  transition: opacity 0.9s ease;
+  padding: var(--pad-top) var(--pad-right) var(--pad-bottom) var(--pad-left);
+  background: var(--bg);
+  transition: opacity 0.9s var(--ease);
 }
-
 #cover.gone { opacity: 0; pointer-events: none; }
 
-.cover-in {
-  text-align: center;
-  padding: var(--pad-top) var(--pad-right) var(--pad-bottom) var(--pad-left);
-  max-width: 30rem;
+.cover-in { width: min(34rem, 100%); text-align: center; }
+
+.cover-eyebrow {
+  margin: 0 0 var(--s3);
+  font-size: var(--fs-mark);
+  /* 中文不像拉丁字母那样靠字距拉出气质 —— 0.24em 会把这一行拆成一个个孤立的字 */
+  letter-spacing: var(--ls-wide);
+  color: var(--text-3);
 }
 
 .cover-t {
-  margin: 0 0 0.25em;
-  font-size: clamp(2rem, 8vw, 3.2rem);
+  margin: 0 0 var(--s3);
+  font-size: var(--fs-hero);
   font-weight: 600;
-  letter-spacing: 0.04em;
+  letter-spacing: var(--ls-wide);
+  line-height: var(--lh-tight);
+  color: var(--text);
 }
 
 .cover-s {
-  margin: 0 0 2em;
-  color: var(--ink-2);
+  margin: 0 auto;
+  max-width: 28em;
+  font-size: var(--fs-tiny);
+  line-height: var(--lh-body);
+  color: var(--text-2);
+}
+
+/* 三个数字，交代这一遍要花多少工夫 —— 比一句「交互式体验」有用 */
+.cover-facts {
+  display: flex;
+  justify-content: center;
+  gap: var(--s5);
+  margin: var(--s5) 0 var(--s6);
+  padding: 0;
+  list-style: none;
+  font-size: var(--fs-mini);
+  color: var(--text-3);
+}
+.cover-facts b {
+  font-family: var(--mono);
+  font-weight: 400;
+  font-size: var(--fs-mid);
+  color: var(--accent);
+  margin-right: 3px;
 }
 
 .cover-bar {
-  height: 2px;
-  background: var(--line);
-  border-radius: 2px;
+  width: min(18rem, 100%);
+  height: 3px;
+  margin: 0 auto;
+  border-radius: var(--r-full);
+  background: var(--line-2);
   overflow: hidden;
 }
-
 .cover-bar > i {
   display: block;
   height: 100%;
   width: 0;
+  border-radius: var(--r-full);
   background: var(--accent);
-  transition: width 0.4s ease;
+  transition: width var(--t-slow) var(--ease);
 }
 
 .cover-msg {
-  margin: 1em 0 0;
-  font-size: 0.875rem;
-  color: var(--ink-2);
+  margin: var(--s4) 0 0;
   min-height: 1.6em;
+  font-size: var(--fs-tiny);
+  color: var(--text-3);
+}
+.cover-msg.bad { color: var(--stop); }
+
+/* 就绪之后这一块换成「开始装车」＋「怎么操作」 */
+#cover-act {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--s2);
+  margin-top: var(--s5);
+  animation: fade var(--t-slow) var(--ease) both;
 }
 
-.cover-msg.bad { color: #c2503c; }
-
-.btn {
-  font: inherit;
-  padding: 0.7em 1.6em;
-  border-radius: 999px;
-  border: 1px solid var(--line);
-  background: transparent;
-  color: var(--ink);
-  cursor: pointer;
-}
-
-.btn-primary {
-  background: var(--accent);
-  border-color: transparent;
-  color: #fff;
-}
-
-.btn:disabled { opacity: 0.5; cursor: default; }
-
-@media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after {
-    animation-duration: 0.01ms !important;
-    transition-duration: 0.01ms !important;
-  }
+/* 加载失败时这里会多出一段说明，读起来要像正文而不是按钮的附注 */
+#cover-act .cover-why {
+  max-width: 28em;
+  margin-top: var(--s2);
+  font-size: var(--fs-mini);
+  line-height: var(--lh-body);
+  color: var(--text-3);
 }

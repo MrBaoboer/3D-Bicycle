@@ -1,20 +1,21 @@
 /*
- * 开箱装车 · 3D 分步交互说明书
+ * 从零装一台山地车 · 3D 分步交互说明书
  * Copyright © 2026 MrBaoboer
  *
- * 代码许可见 LICENSE；整车模型是第三方素材，另行署名与授权，见 assets/CREDITS.md。
+ * 代码 AGPL-3.0（见 LICENSE）；课程与文案 CC BY-NC-SA 4.0；
+ * 整车模型是第三方素材，CC BY-SA 4.0，另行署名，见 assets/CREDITS.md。三层的界线见 COMMERCIAL.md。
  *
  * 这里是唯一的组装处：new 出每一层，塞进一个共享的 ctx，再把步骤表交给引擎。
  * 步骤脚本不 import 任何单例，需要什么都从 ctx 里拿 —— 换一套渲染或界面时，
- * 改的是这一个文件，不是十三个步骤。
+ * 改的是这一个文件，不是二十九个步骤。
  */
 
-import './styles.css';
+// 令牌在最前：后面四份都只引用语义名，不写颜色
 import './ui/styles/tokens.css';
 import './ui/styles/base.css';
+import './styles.css';
 import './ui/styles/chrome.css';
 import './ui/styles/surfaces.css';
-import './ui/styles/controls.css';
 
 import * as THREE from 'three';
 
@@ -22,7 +23,8 @@ import { Stage, detectTier } from './render/stage.js';
 import { Bike } from './render/bike.js';
 import { Fx } from './render/fx.js';
 import { Bolts } from './render/bolt.js';
-import { BOM } from './core/bom.js';
+import { Bom } from './core/bom.js';
+import manifest from '../assets/bike.manifest.json';
 import { state, resetRun } from './core/state.js';
 import { HUD } from './ui/hud.js';
 import { Arrows } from './ui/guides.js';
@@ -30,8 +32,9 @@ import { SFX, unlockAudio } from './audio/sfx.js';
 import { Slide } from './interact/slide.js';
 import { Screw } from './interact/screw.js';
 import { Engine } from './app/engine.js';
+import { Build } from './app/build.js';
 import { tick as tickTweens } from './util/tween.js';
-import { acts } from './steps/acts.js';
+import { acts, PHASES } from './steps/acts.js';
 
 const cover = document.getElementById('cover');
 const coverBar = document.getElementById('cover-bar');
@@ -44,6 +47,9 @@ const progress = (p, msg) => {
 };
 const frame = () => new Promise((r) => setTimeout(r, 16));
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+/** 全片共用的那一份清单。读进来的地方只有这一处，其余一律从 ctx.bom 取 */
+const BOM = new Bom(manifest);
 
 async function main() {
   const tier = detectTier();
@@ -71,24 +77,23 @@ async function main() {
     setTimeout(() => { cover.hidden = true; }, 1000);
   });
 
-  progress(0.08, '正在拆包装');
+  // 加载期只报两件事：车还在读（占掉九成时间，进度条说得清）、正在架好。
+  // 中间再插几句「正在拆包装」「正在清点随车件」只是花字，读的人一句也来不及看
   await frame();
-
   const bike = new Bike(stage.scene);
-  await bike.load((p) => progress(0.08 + p * 0.7, '正在把车搬进来'));
-
-  progress(0.82, '正在清点随车件');
-  await frame();
+  await bike.load((p) => progress(p * 0.85, '正在把车搬进来'));
 
   const hud = new HUD(state);
   const fx = new Fx(stage.scene, tier);
   const guides = new Arrows(stage.scene);
-  const bolts = new Bolts(stage.scene);
+  const bolts = new Bolts(stage.scene, BOM);
 
   /** 全片共享上下文，键表见 docs/CONTRACT.md */
   const ctx = { stage, bike, bom: BOM, bolts, hud, sfx: SFX, fx, guides, state, tier };
   ctx.slide = new Slide(ctx);
   ctx.screw = new Screw(ctx);
+  // 「此刻车上该有哪些件」由它按步骤计划现推 —— 从零开始装靠这一层
+  ctx.build = new Build(ctx);
 
   progress(0.9, '正在架好');
   await frame();
@@ -102,7 +107,7 @@ async function main() {
   }
 
   const engine = new Engine(ctx);
-  engine.setSteps(acts(ctx));
+  engine.setSteps(acts(ctx), PHASES);
 
   // 界面占掉的上下两条边交给三维 —— 车据此让位与退远
   hud.onSafeArea = (safe) => stage.setSafeArea(safe);
@@ -111,7 +116,7 @@ async function main() {
   hud.onRestart = async () => {
     resetRun();
     bolts.clear();
-    await engine.go(0);
+    await engine.restart();
   };
 
   // 切到别的标签页时把声音停住。画面走 rAF 本来就停了
@@ -136,10 +141,12 @@ async function main() {
   await sleep(160);
   cover.dataset.ready = '1';
   coverMsg.hidden = true;
+  // 读完了，进度条就没有可说的了 —— 留着一条满格的橙线只会跟主按钮抢注意力
+  cover.querySelector('.cover-bar').hidden = true;
   coverAct.hidden = false;
   coverAct.innerHTML = `
     <button class="btn btn-primary" id="cv-go">开始装车</button>
-    <div class="cover-alt"><button class="btn btn-text" id="cv-help">怎么操作</button></div>`;
+    <button class="btn btn-text" id="cv-help">先看怎么操作</button>`;
   coverAct.querySelector('#cv-go').focus();
 
   const enter = async () => {
@@ -166,8 +173,9 @@ main().catch((e) => {
   coverAct.hidden = false;
   coverAct.innerHTML = `
     <button class="btn btn-primary" id="cv-retry">重新加载</button>
-    <p class="cover-msg">这一页需要 WebGL 2。刷新一次通常就好；反复失败的话，
-      换 Chrome / Edge 111 以上、Safari 16.4 以上或 Firefox 113 以上再试。</p>`;
+    <p class="cover-why">这一页要用 WebGL 2 画三维。刷新一次多半就好；
+      还是不行的话，换 Chrome / Edge 111 以上、Safari 16.4 以上、Firefox 113 以上，
+      并确认浏览器设置里没有关掉硬件加速。</p>`;
   coverAct.querySelector('#cv-retry').addEventListener('click', () => location.reload());
 });
 

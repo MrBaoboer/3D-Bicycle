@@ -271,16 +271,34 @@ const Z = new THREE.Vector3(0, 0, 1);
  * 圆柱的轴向会被欧拉合成顺序带偏，整颗螺丝歪着长出来。
  */
 export class Bolts {
-  constructor(scene) {
+  /**
+   * @param {THREE.Scene} scene
+   * @param {{fastener(id:string):object}} [bom] 有它才能按 id 取件 —— 见 spawn()
+   */
+  constructor(scene, bom = null) {
     this.scene = scene;
+    this.bom = bom;
     /** @type {Map<string, THREE.Object3D>} */
     this.items = new Map();
     /** @type {Map<string, THREE.Object3D>} */
     this.tools = new Map();
   }
 
-  /** 按清单里的紧固件把螺栓摆到位 */
-  spawn(f) {
+  /**
+   * id 与紧固件对象都收。
+   *
+   * 契约（docs/CONTRACT.md）写的是 `spawn(fastenerId)`，而步骤脚本手头常常已经有
+   * 那个对象了 —— 两种都认，调用方不必为此各写一次查表。
+   */
+  #fastener(x) {
+    if (typeof x !== 'string') return x;
+    if (!this.bom) throw new Error(`[bolts] 传的是紧固件 id "${x}"，但这个 Bolts 没接清单，查不了`);
+    return this.bom.fastener(x);
+  }
+
+  /** 按清单里的紧固件把螺栓摆到位。传 id 或紧固件对象都行 */
+  spawn(idOrFastener) {
+    const f = this.#fastener(idOrFastener);
     if (this.items.has(f.id)) return this.items.get(f.id);
     const kind = /Senkkopf|countersunk|沉头/.test(f.name) ? 'countersunk'
       : /桶轴|axle/.test(f.id) ? 'button' : 'socket';
@@ -321,7 +339,10 @@ export class Bolts {
     o.quaternion.setFromUnitVectors(Z, o.userData.axis.clone().negate()).premultiply(q);
   }
 
-  /** 取一件工具，同一件复用 —— 每次新建会把 GL program 反复编译一遍 */
+  /**
+   * 取一件工具，同一件复用 —— 每次新建会把 GL program 反复编译一遍。
+   * 建出来先藏着；要摆到画面上走 useTool()。
+   */
   tool(kind) {
     if (this.tools.has(kind)) return this.tools.get(kind);
     const make = TOOL_MAKERS[kind] || TOOL_MAKERS['hex-5'];
@@ -329,6 +350,19 @@ export class Bolts {
     o.visible = false;
     this.scene.add(o);
     this.tools.set(kind, o);
+    return o;
+  }
+
+  /**
+   * 亮出这一件，其余收起。
+   *
+   * 工具同时是「该拧的是这一颗」的标记，比任何箭头都直白 —— 它不出现，
+   * 拧螺丝那几步就只剩一颗孤零零的螺栓头，看不出手该搭在哪儿。
+   * 一次只留一件在场上：换螺栓时若不收，上一把扳手会留在原地当障碍物。
+   */
+  useTool(kind) {
+    const o = this.tool(kind);
+    for (const t of this.tools.values()) t.visible = t === o;
     return o;
   }
 

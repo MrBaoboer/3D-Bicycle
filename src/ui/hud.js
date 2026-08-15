@@ -1,9 +1,9 @@
 /**
  * 界面层
  *
- * 全屏三维，界面只有两条：顶上说「走到哪一步、这会儿手该做什么」，
- * 底下一条放翻页和这一步的任务。中间整块留给车 —— 拧螺丝时得看清扳手落在哪颗螺栓上，
- * 侧栏会把这块地方吃掉一半。
+ * 全屏三维，界面退到四周：顶上一行说走到哪了，两侧各一枚翻页，
+ * 右边一列放读数与「为什么」，底部一句旁白。**没有底部条** ——
+ * 一条横贯屏幕的实底会把画面切掉一截，而画面正是这份说明书要说的全部。
  *
  * 覆盖层只有两种形态：
  *   卷 sheet —— 盖住画面，讲一件需要专心看的事；
@@ -19,9 +19,6 @@ import * as THREE from 'three';
 import { icon } from './icons.js';
 import { torqueText } from '../core/state.js';
 
-/** 五章。步骤的 phase 就是这个数组的下标 */
-export const PHASES = ['开箱', '前轮', '车把', '座管与脚踏', '上路前'];
-
 /** 怎么操作。前四条第一次进来就该知道，后两条留给右上角的完整版。touch 是触屏机型的替换句 */
 const GUIDE = [
   { k: ['arrow-left', 'arrow-right'], t: '翻到上一步、下一步。键盘 <em>←</em> <em>→</em> 一样管用',
@@ -30,8 +27,8 @@ const GUIDE = [
     touch: '按住画面拖，换个角度看；双指开合缩放。转到哪儿就停在哪儿' },
   { k: ['drag'], t: '零件顺着箭头指的方向拖，快到位会自己吸住' },
   { k: ['screw'], t: '螺丝按住绕圈拧，扭矩表走进绿区就停手' },
-  { k: ['menu'], t: '深色、声音、扭矩单位，都在右上角', full: true },
-  { k: ['wrench'], t: '不想自己动手，就按旁边的「帮我装上」', full: true },
+  { k: ['menu'], t: '深色、声音、扭矩单位，都在右上角那枚按钮里', full: true },
+  { k: ['wrench'], t: '不想自己动手，按「帮我装上」自动做完 —— 该看的、该听的一样不少', full: true },
 ];
 
 /**
@@ -105,35 +102,51 @@ const BOLT = {
 /** 「面盖螺丝 · 上左」在一排四颗里只印得下「上左」，全名留给读屏 */
 const shortName = (s) => String(s || '').split('·').pop().trim();
 
+/*
+ * 常驻界面的骨架。没有底部条 —— 画面是主角，界面只在四周留下最少的几笔。
+ *
+ *   顶      走到哪一章、哪一步 —— 只读，不动手
+ *   左右    翻页，垂直居中，贴着边
+ *   右侧列  这一步的读数与「为什么」
+ *   底部    一句旁白，以及需要动手时才出现的那一个按钮。都不带底色
+ *
+ * 旁白只有一行，且是唯一一处常驻文字。这一份要让人**看懂**，
+ * 该说的话由动画说 —— 文字只负责点一下「现在看哪儿」。
+ */
 const SHELL = `
 <header class="topbar" data-quiet="0">
-  <nav class="chapters" aria-label="章节"></nav>
+  <nav class="rail" aria-label="章节"></nav>
   <div class="toprow">
-    <div class="where"><span class="stepno"></span><h2 class="steptitle"></h2></div>
-    <button type="button" class="icon-btn btn-menu" aria-label="更多"
-            aria-haspopup="true" aria-expanded="false"></button>
+    <p class="where"><span class="stepno"></span><span class="steptitle"></span></p>
+    <div class="toptools">
+      <button type="button" class="chip note-tab" aria-controls="hud-note"
+              aria-expanded="false" hidden></button>
+      <button type="button" class="icon-btn btn-menu" aria-label="设置与帮助"
+              aria-haspopup="true" aria-expanded="false"></button>
+    </div>
   </div>
-  <p class="cue" role="status" aria-live="polite"></p>
 </header>
 
-<aside class="note scroll" id="hud-note" aria-label="知识卡片" hidden></aside>
-<button type="button" class="note-tab" aria-controls="hud-note" aria-expanded="false" hidden></button>
+<button type="button" class="nav nav-prev" aria-label="上一步"></button>
+<button type="button" class="nav nav-next" aria-label="下一步"></button>
+
+<div class="side">
+  <aside class="note scroll" id="hud-note" aria-label="这一步的原理" hidden></aside>
+  <div class="readout" hidden>
+    <ul class="bolts" role="list" hidden></ul>
+    <div class="gauge" data-state="low" hidden>${GAUGE_HTML}</div>
+  </div>
+</div>
 
 <div class="toast" role="status" aria-live="polite" hidden></div>
 <p class="sr-only sr-step" role="status" aria-live="polite"></p>
 
-<div class="readout" hidden>
-  <ul class="bolts" role="list" hidden></ul>
-  <div class="gauge" data-state="low" hidden>${GAUGE_HTML}</div>
-</div>
-
-<footer class="bottombar" data-quiet="0">
-  <button type="button" class="nav nav-prev" aria-label="上一步"></button>
+<footer class="foot" data-quiet="0">
   <div class="actions">
     <div class="alts"></div>
     <button type="button" class="btn btn-primary btn-task" hidden></button>
   </div>
-  <button type="button" class="nav nav-next" aria-label="下一步"></button>
+  <p class="cue" role="status" aria-live="polite"></p>
 </footer>
 
 <div class="overlay" hidden></div>`;
@@ -153,13 +166,14 @@ export class HUD {
     const q = (sel) => root.querySelector(sel);
     this.el = {
       root,
-      topbar: q('.topbar'), chapters: q('.chapters'), stepno: q('.stepno'), steptitle: q('.steptitle'),
+      topbar: q('.topbar'), chapters: q('.rail'), stepno: q('.stepno'), steptitle: q('.steptitle'),
       cue: q('.cue'), menu: q('.btn-menu'),
+      side: q('.side'),
       note: q('.note'), noteTab: q('.note-tab'), toast: q('.toast'), srStep: q('.sr-step'),
       readout: q('.readout'), bolts: q('.bolts'), gauge: q('.gauge'),
       dialOk: q('.dial-ok'), dialHot: q('.dial-hot'), dialVal: q('.dial-val'), dialHand: q('.dial-hand'),
       gaugeNm: q('.gauge-nm'), gaugeGoal: q('.gauge-goal'),
-      bottombar: q('.bottombar'), alts: q('.alts'), task: q('.btn-task'),
+      foot: q('.foot'), alts: q('.alts'), task: q('.btn-task'),
       prev: q('.nav-prev'), next: q('.nav-next'),
       overlay: q('.overlay'),
       cover: document.getElementById('cover'),
@@ -181,6 +195,7 @@ export class HUD {
     this._top = null;
     this._toastTimer = null;
     this._readyTimer = null;
+    this._barH = -1;
 
     this.el.menu.innerHTML = icon('menu');
     this.el.prev.innerHTML = icon('arrow-left');
@@ -202,7 +217,7 @@ export class HUD {
     // 顶上和底下这两条一变高，三维的取景就得跟着让位
     this._ro = new ResizeObserver(() => this.#syncSafe());
     this._ro.observe(this.el.topbar);
-    this._ro.observe(this.el.bottombar);
+    this._ro.observe(this.el.foot);
     this._ro.observe(this.el.readout);
     addEventListener('resize', () => { this.#syncSafe(); this.#layoutNote(); });
     // 手机横过来时 resize 未必先到，orientationchange 补一道
@@ -228,23 +243,37 @@ export class HUD {
     const tb = box(this.el.topbar);
     if (tb && this.el.topbar.dataset.quiet !== '1') top = tb.bottom;
 
-    let bottom = 0;
+    // 底部那一条实测多高 —— 坞与窄屏读数据此叠在它上面，而不是压上去
+    const bar = this.el.foot.dataset.quiet === '1' ? null : box(this.el.foot);
+    const barH = bar ? Math.round(vh - bar.top) : 0;
+    if (barH !== this._barH) {
+      this._barH = barH;
+      document.documentElement.style.setProperty('--bar-h', `${barH}px`);
+    }
+
+    let bottom = barH;
     /*
-     * 只算**真正贴着底边**的那些。
-     * 少了这道判据，一个摆在右上角的读数区也会被算成「底部占了 632 像素」——
-     * 三维于是以为自己只剩上面一小条，把主体整个顶出画面。
-     * 判据用底边间距而不是元素位置：坞、读数区摆在哪由 CSS 说了算，这里不该假设。
+     * 除了底部条，还要算上**叠在它上面、又正好挡着主体**的那些：坞、窄屏的读数区。
+     *
+     * 两道判据缺一不可：
+     *   贴底 —— 下沿离屏幕底不超过一条底部条再加一点。少了它，一个摆在右上角的
+     *           读数区也会被算成「底部占了 632 像素」，三维于是以为自己只剩上面
+     *           一小条，把主体整个顶出画面。
+     *   挡道 —— 与画面横向中间那一半有重叠。车是横向居中的，缩在右下角的扭矩表
+     *           挡不到它；把那 270 像素也算进去，整车就被无谓地推上去一大截。
+     * 判据用几何而不是元素身份：谁摆在哪由 CSS 说了算，这里不该假设。
      */
+    const reach = barH + 24;
+    const midL = innerWidth * 0.25;
+    const midR = innerWidth * 0.75;
     const rise = (el) => {
       const r = box(el);
-      if (!r || !r.height || vh - r.bottom > 24) return;
+      if (!r || !r.height || vh - r.bottom > reach) return;
+      if (r.right < midL || r.left > midR) return;
       bottom = Math.max(bottom, vh - r.top);
     };
-    if (this.el.bottombar.dataset.quiet !== '1') { rise(this.el.bottombar); rise(this.el.readout); }
+    if (bar) rise(this.el.readout);
     this.el.overlay.querySelectorAll('.dock').forEach(rise);
-
-    // 坞摊开时底部那一条要抬到它上面 —— 两层控件压在一起，谁都按不准
-    document.documentElement.style.setProperty('--dock-h', `${this.#dockHeight()}px`);
 
     const next = { top: Math.round(top), bottom: Math.round(bottom) };
     if (next.top === this._safe.top && next.bottom === this._safe.bottom) return;
@@ -252,23 +281,26 @@ export class HUD {
     this.onSafeArea?.(next);
   }
 
-  #dockHeight() {
-    let h = 0;
-    this.el.overlay.querySelectorAll('.dock').forEach((d) => {
-      const r = d.getBoundingClientRect();
-      if (r.height) h = Math.max(h, innerHeight - r.top);
-    });
-    return h;
-  }
-
   // ══════════════ 章节 ══════════════
 
-  /** 用步骤表铺出顶部的章节导航：每一章一段，每一步一格，格子都能点 */
-  setChapters(steps, names = PHASES) {
+  /**
+   * 用步骤表铺出顶部的章节导航：每一章一段，每一步一格，格子都能点。
+   * @param {object[]} steps
+   * @param {string[]} names 章节名，由内容层提供 —— 这一层不认识自行车，
+   *   自带一份就会与内容各存一套，对不上的那几章会被静默并掉
+   */
+  setChapters(steps, names) {
+    if (!Array.isArray(names) || !names.length) {
+      throw new Error('[hud] setChapters 需要章节名；界面层不自带一份');
+    }
     this.steps = steps;
     this.phases = names;
     const byPhase = names.map(() => []);
-    steps.forEach((s, i) => byPhase[Math.min(s.phase ?? 0, names.length - 1)].push({ i, s }));
+    steps.forEach((s, i) => {
+      const p = s.phase ?? 0;
+      if (p >= names.length) throw new Error(`[hud] 第 ${i + 1} 步 ${s.id} 的 phase 是 ${p}，但只有 ${names.length} 章`);
+      byPhase[p].push({ i, s });
+    });
 
     this.el.chapters.innerHTML = byPhase.map((list, p) => `
       <div class="ch" data-p="${p}">
@@ -359,20 +391,25 @@ export class HUD {
    * @param {string} [ico] 图标名，见 ui/icons.js
    * @param {{quiet?:boolean}} [o]
    */
-  setCue(html, ico, { quiet = false } = {}) {
+  setCue(text, { quiet = false } = {}) {
     const e = this.el.cue;
     e.setAttribute('aria-live', quiet ? 'off' : 'polite');
-    e.innerHTML = html ? (ico ? icon(ico) : '') + `<span>${html}</span>` : '';
-    e.hidden = !html;
+    e.textContent = text || '';
+    e.hidden = !text;
   }
 
-  /** 画面中上方一句话，说完就走。bad 留给「拧过头了」这类必须看见的坏消息 */
-  toast(text, { dur = 2400, bad = false } = {}) {
+  /**
+   * 画面中上方一句话，说完就走。
+   * @param {string} text
+   * @param {{dur?:number, tone?:'go'|'stop'}} [o] tone 只有两种：到位了、出问题了。
+   *   两者都另加一枚图标 —— 只靠红绿分，色觉障碍读到的是同一句话
+   */
+  toast(text, { dur = 2600, tone } = {}) {
     clearTimeout(this._toastTimer);
     const e = this.el.toast;
     e.hidden = false;
-    e.className = `toast${bad ? ' bad' : ''}`;
-    e.textContent = text;
+    e.className = `toast${tone ? ` ${tone}` : ''}`;
+    e.innerHTML = (tone ? icon(tone === 'go' ? 'check' : 'warn') : '') + `<span>${text}</span>`;
     e.style.animation = 'none'; void e.offsetWidth; e.style.animation = '';
     this._toastTimer = setTimeout(() => { e.hidden = true; }, dur);
   }
@@ -421,11 +458,16 @@ export class HUD {
     this.#dropNoteRect();
   }
 
+  /**
+   * 窄屏那枚开合钮。标签固定写「为什么」，不印卡片标题 ——
+   * 标题长到十几个字，塞进顶栏那一行会把步名挤没。
+   */
   #paintNoteTab() {
     const b = this.el.noteTab;
-    b.innerHTML = this._noteOpen ? '<span>收起</span>' : icon('help') + `<span>${this._note?.title || '为什么'}</span>`;
+    b.innerHTML = icon('help') + '<span>为什么</span>';
+    b.dataset.on = this._noteOpen ? '1' : '0';
     b.setAttribute('aria-expanded', String(this._noteOpen));
-    b.setAttribute('aria-label', this._noteOpen ? '收起知识卡片' : '展开知识卡片');
+    b.setAttribute('aria-label', `${this._noteOpen ? '收起' : '展开'}这一步的原理：${this._note?.title || ''}`);
   }
 
   toggleNote() {
@@ -446,6 +488,12 @@ export class HUD {
     b.disabled = false;
     this.onTask = onClick;
   }
+
+  /** 这一步还挂着一个没按的任务按钮 —— 引擎据此判断「下一步」该先替他做完 */
+  get hasTask() { return !this.el.task.hidden && !!this.onTask; }
+
+  /** 替用户按下那个任务按钮 */
+  runTask() { this.onTask?.(); }
 
   /** 任务做完了：右边那枚箭头亮一下，告诉你可以走了 */
   readyNext() {
@@ -842,7 +890,7 @@ export class HUD {
    *   · 标注是挂在覆盖层之后的真按钮，从卷里的「知道了」按一下 Tab 就落到它们身上。
    */
   #setChromeInert(on) {
-    for (const el of [this.el.topbar, this.el.bottombar, this.el.readout,
+    for (const el of [this.el.topbar, this.el.foot, this.el.readout,
       this.el.note, this.el.noteTab, this.el.cover]) {
       if (el) el.inert = on;
     }
@@ -916,56 +964,10 @@ export class HUD {
   showChrome(v) {
     this._chrome = !!v;
     this.el.topbar.hidden = !v;
-    this.el.bottombar.hidden = !v;
+    this.el.foot.hidden = !v;
     if (!v) { this.setNote(null); this.clearSpots(); }
     this.#syncReadout();
   }
 
-  get navVisible() { return !this.el.bottombar.hidden; }
-}
-
-/**
- * 三维方向引导：钉在世界坐标上的一枚箭头，指着「往哪儿使劲」。
- *
- * 凡是要用户拖的地方都得有 —— 没有它，画面上就只是一堆零件，
- * 「该往哪个方向推」得画出来才知道。
- */
-export class Arrows {
-  constructor(root = document.getElementById('hud') || document.body) {
-    this.root = root;
-    this.items = [];
-  }
-
-  /** 传 dir（世界方向向量）则屏幕角度每帧按相机投影求出；只传 rot 则用固定角度 */
-  set(list) {
-    this.clear();
-    for (const it of list || []) {
-      const el = document.createElement('div');
-      el.className = 'arrow';
-      el.innerHTML = icon(it.ico || 'arrow-right');
-      el.style.transform = `translate(-50%,-50%) rotate(${it.rot || 0}deg)`;
-      this.root.appendChild(el);
-      this.items.push({ el, pos: it.pos.clone(), dir: it.dir ? it.dir.clone().normalize() : null });
-    }
-  }
-
-  clear() { for (const i of this.items) i.el.remove(); this.items = []; }
-
-  update(camera) {
-    if (!this.items.length) return;
-    const v = new THREE.Vector3();
-    const v2 = new THREE.Vector3();
-    for (const it of this.items) {
-      v.copy(it.pos).project(camera);
-      it.el.style.display = v.z > 1 ? 'none' : '';
-      it.el.style.left = `${(v.x * 0.5 + 0.5) * innerWidth}px`;
-      it.el.style.top = `${(-v.y * 0.5 + 0.5) * innerHeight}px`;
-      if (it.dir) {
-        // 把 pos 与 pos+dir 两点都投到屏幕上求夹角 —— 写死的角度换个机位就是反的
-        v2.copy(it.pos).addScaledVector(it.dir, 0.3).project(camera);
-        const deg = (Math.atan2(-(v2.y - v.y) * innerHeight, (v2.x - v.x) * innerWidth) * 180) / Math.PI;
-        it.el.style.transform = `translate(-50%,-50%) rotate(${deg}deg)`;
-      }
-    }
-  }
+  get navVisible() { return !this.el.foot.hidden; }
 }

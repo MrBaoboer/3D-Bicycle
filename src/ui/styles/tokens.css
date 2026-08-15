@@ -42,9 +42,15 @@
   --accent-faint: rgba(176, 73, 26, 0.10);
   --on-accent:    #fffaf6;
 
-  /* 两个语义色只说扭矩这一件事：绿是目标区间，红是超了 */
+  /*
+   * 三个语义色只说扭矩这一件事：绿是目标区间，黄是超了但还没坏，红是滑丝。
+   * 三档都过 4.5:1 —— 扭矩读数是这一屏最要紧的数字，不能只够「看得见」。
+   * 三档同时另有形状差别（弧长、指针位置、图标），不靠辨色也读得出来。
+   */
   --go:        #24694a;
   --go-soft:   rgba(36, 105, 74, 0.16);
+  --warn:      #8a5a06;
+  --warn-soft: rgba(138, 90, 6, 0.16);
   --stop:      #b3382a;
   --stop-soft: rgba(179, 56, 42, 0.14);
 
@@ -82,6 +88,8 @@
 
   --dk-go:        #58c68c;
   --dk-go-soft:   rgba(88, 198, 140, 0.18);
+  --dk-warn:      #e2b24c;
+  --dk-warn-soft: rgba(226, 178, 76, 0.18);
   --dk-stop:      #f2705a;
   --dk-stop-soft: rgba(242, 112, 90, 0.18);
 
@@ -108,6 +116,7 @@
     --accent-mid: var(--dk-accent-mid); --accent-soft: var(--dk-accent-soft);
     --accent-faint: var(--dk-accent-faint); --on-accent: var(--dk-on-accent);
     --go: var(--dk-go); --go-soft: var(--dk-go-soft);
+    --warn: var(--dk-warn); --warn-soft: var(--dk-warn-soft);
     --stop: var(--dk-stop); --stop-soft: var(--dk-stop-soft);
     --lift-1: var(--dk-lift-1); --lift-2: var(--dk-lift-2); --lift-3: var(--dk-lift-3);
     color-scheme: dark;
@@ -125,6 +134,7 @@
   --accent-mid: var(--dk-accent-mid); --accent-soft: var(--dk-accent-soft);
   --accent-faint: var(--dk-accent-faint); --on-accent: var(--dk-on-accent);
   --go: var(--dk-go); --go-soft: var(--dk-go-soft);
+  --warn: var(--dk-warn); --warn-soft: var(--dk-warn-soft);
   --stop: var(--dk-stop); --stop-soft: var(--dk-stop-soft);
   --lift-1: var(--dk-lift-1); --lift-2: var(--dk-lift-2); --lift-3: var(--dk-lift-3);
   color-scheme: dark;

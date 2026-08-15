@@ -23,13 +23,13 @@
  * 清单存原始名，tools/check-manifest.mjs 才能拿 GLB 离线逐条对账。
  *
  * 分层上这里破了「core 不碰 three」一条：只借 Vector3 这一个纯数学类型，不碰场景。
+ *
+ * **不在这里 import 那份 JSON。** 裸导入 .json 是 Vite 的写法，Node 解析不了，
+ * 于是整个模块在 node:test 里 import 不进来 —— 对角配对、拓扑排序这些最容易写错、
+ * 也最难在浏览器里断言的纯逻辑就一条都测不了。清单由 main.js 读进来交给构造函数。
  */
 
 import { Vector3 } from 'three';
-// 裸导入是 Vite 的写法。别顺手补 `with { type: 'json' }`：eslint.config.js 的
-// ecmaVersion 是 2024，espree 解析不了导入属性，补上 npm run lint 当场红。
-// 代价是 Node 里 import 不了这个模块，清单逻辑要单测得先把这两行 import 换掉。
-import manifest from '../../assets/bike.manifest.json';
 
 /** 裸数组 → 冻结的 Vector3 */
 const vec = (a) => Object.freeze(new Vector3(a[0], a[1], a[2]));
@@ -94,6 +94,9 @@ export class Bom {
 
     Object.freeze(this);
   }
+
+  /** 这份清单里一共几件、几颗。封面与文档要报数，别各数各的 */
+  get counts() { return { parts: this.parts.length, fasteners: this.fasteners.length }; }
 
   /** 按 id 取件 */
   part(id) {
@@ -211,5 +214,3 @@ export class Bom {
   }
 }
 
-/** 全片共用的那一份清单（main.js 把它塞进 ctx.bom） */
-export const BOM = new Bom(manifest);

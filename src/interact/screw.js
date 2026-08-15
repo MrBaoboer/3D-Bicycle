@@ -55,6 +55,13 @@ const PICK_PX = 64;
 /** 角度差归一到 ±π 之内 —— 极角每转过一圈都要跨一次 ±π，不归一就会跳一整圈 */
 const wrap = (d) => d - TAU * Math.round(d / TAU);
 
+/**
+ * 提示环的半径，按公称直径现算。
+ * 写死一个 90 mm 的话，M5 面盖螺丝那一步会摊出一个比整个把立还大的白圈 ——
+ * 那几步的取景本来只有十几厘米宽。
+ */
+const ringR = (f) => 0.0022 * (Number(String(f.spec || 'M5').match(/M(\d+)/)?.[1]) || 5);
+
 const clamp01 = (x) => Math.max(0, Math.min(1, x));
 
 export class Screw {
@@ -125,7 +132,8 @@ export class Screw {
     this.active = null;
     this.bolt = null;
     this.busy = false;
-    if (this.tool) { this.tool.removeFromParent(); this.tool = null; }
+    this.tool = null;
+    this.ctx.bolts.hideTools();
     // 翻页可能正好落在一次拖拽中间 —— 手指还按着就交还轨道控制，剩下半程会变成转镜头。留给 onUp
     if (!this.grabbed) this.ctx.stage.controls.enabled = true;
   }
@@ -190,6 +198,16 @@ export class Screw {
     const f = this.ctx.bom.fastener(id);
     const axis = new THREE.Vector3(...f.axis).normalize();
     const obj = this.ctx.bolts.spawn(id);
+    /*
+     * 脚踏轴不是一颗单独的螺栓 —— 它长在脚踏上，模型里本来就有。
+     * 判据取自清单：那件的 install.kind 是 thread（旋入），不是 slide（推入）。
+     * 再摆一颗程序化螺栓出来，画面上就多了一颗现实中不存在的螺母，
+     * 而它还会跟着脚踏一起被拖走，看着像零件在裂开。
+     * 仍然要 spawn：它是拾取判定与工具落点的锚，只是不画出来。
+     */
+    obj.visible = !this.ctx.bom.parts.some(
+      (p) => p.install?.kind === 'thread' && (p.fasten ?? []).includes(id),
+    );
     if (!this.rest.has(id)) this.rest.set(id, obj.quaternion.clone());
 
     // 极角的零向量：取一个与轴不平行的方向去掉轴向分量。u0 × 轴向 的次序定死右手为正
@@ -223,11 +241,9 @@ export class Screw {
     const b = this.session?.rigs.get(id);
     if (!b) return;
     this.bolt = b;
-    const t = this.ctx.bolts.tool(b.f.tool);
-    if (t !== this.tool) { this.tool?.removeFromParent(); this.tool = t; }
-    if (t && !t.parent) this.ctx.stage.scene.add(t);
+    this.tool = this.ctx.bolts.useTool(b.f.tool);
     this._place(b);
-    this.ctx.fx?.ring?.(b.obj.position.clone(), b.axis.clone());
+    this.ctx.fx?.ring?.(b.obj.position.clone(), b.axis.clone(), { r1: ringR(b.f) });
   }
 
   // ══ 一颗的状态 → 画面 ═══════════════════════════════════════════════
@@ -295,6 +311,9 @@ export class Screw {
       b.tight = true;
       this.ctx.sfx.play('TORQUE_CLICK');
       this.ctx.fx?.spark?.(b.obj.position.clone());
+      // 到点当场记账，不等松手。_finish 只在 pointerup 才跑，而「拧到点、
+      // 直接按方向键翻页」这条路上它永远不跑 —— 结尾自检就会说这颗没拧过
+      this.ctx.state.fastened = { ...this.ctx.state.fastened, [f.id]: b.nm };
       s.onTight?.(b.nm, f.id);
     }
     if (!b.stripped && b.nm >= f.strip) {
@@ -346,7 +365,7 @@ export class Screw {
     // 滑丝的那一颗照样记进 fastened：它确实拧不动了，步骤的完成计数不该卡在这儿
     this.ctx.state.fastened = { ...this.ctx.state.fastened, [id]: b.nm };
     if (b.stripped) this.ctx.state.stripped = { ...this.ctx.state.stripped, [id]: true };
-    this.ctx.fx?.ring?.(b.obj.position.clone(), b.axis.clone());
+    this.ctx.fx?.ring?.(b.obj.position.clone(), b.axis.clone(), { r1: ringR(b.f) });
 
     s.onEach?.(id, { orderOk, nm: b.nm, stripped: b.stripped, index: s.done.length, total: s.total });
 
@@ -354,7 +373,8 @@ export class Screw {
     if (next) { this._use(next); return; }
     if (s.order === 'cross' && s.crossOk) this.ctx.state.crossOrderOk = true;
     this.bolt = null;
-    if (this.tool) { this.tool.removeFromParent(); this.tool = null; }
+    this.tool = null;
+    this.ctx.bolts.hideTools();
     s.onAll?.();
   }
 
@@ -376,6 +396,26 @@ export class Screw {
     return null;
   }
 
+  /**
+   * 按对角规矩该轮到的下一颗。
+   * 上一颗刚拧完、它的对角还空着，就必须是那一颗 —— 自动演示不能自己拧错。
+   */
+  _nextId() {
+    const s = this.session;
+    if (!s?.pending.size) return null;
+    if (s.order === 'cross' && s.done.length % 2 === 1) {
+      const m = this._mate(s.done[s.done.length - 1]);
+      if (m && s.pending.has(m)) return m;
+    }
+    return this._crossOrder([...s.pending])[0] ?? null;
+  }
+
+  /** 只演一颗。「下一步」按一下走一颗，四颗面盖要按四下 */
+  async autoRunNext() {
+    const id = this._nextId();
+    if (id) await this.autoRun(id);
+  }
+
   _crossOrder(ids) {
     if (this.session.order !== 'cross') return ids;
     const left = new Set(ids);
@@ -392,7 +432,7 @@ export class Screw {
   _offerHelp() {
     const s = this.session;
     if (!s || s.fails < 3) return;
-    this.ctx.hud.setAlts([{ label: '帮我拧上', onClick: () => this.autoRun() }]);
+    this.ctx.hud.setAlts([{ label: '帮我拧上', ico: 'wrench', onClick: () => this.autoRun() }]);
   }
 
   // ══ 圆周拖动 ═══════════════════════════════════════════════════════

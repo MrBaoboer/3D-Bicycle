@@ -39,6 +39,8 @@ export class Slide {
     this.ctx = ctx;
     this.ray = new THREE.Raycaster();
     this.ptr = new THREE.Vector2();
+    /** @type {Map<string, object>} 件 id → 备好的件。父级基底与装配位都不会变，量一次就够 */
+    this._rigs = new Map();
     /** 当前这一次装配任务 */
     this.session = null;
     /** 当前这一次拖拽 */
@@ -83,6 +85,9 @@ export class Slide {
     const owner = new Map();
     for (const id of ids) {
       const rig = this.#rig(id);
+      // 备件是缓存的，而 #fail() 会放宽 snap —— 不还原的话，上一次连败三次
+      // 放宽的吸附范围会跟着这件一路传到后面每一次装配
+      rig.snap = this.ctx.bom.part(id).install.snap;
       items.set(id, rig);
       for (const n of rig.nodes) owner.set(n.obj, id);
     }
@@ -115,36 +120,80 @@ export class Slide {
   }
 
   /**
+   * 这个节点的**装配位**，只认第一次见到它时的那个值。
+   *
+   * 不能拿「现在在哪儿」当装配位：一件被摆到预备位之后再备一次件，
+   * 记下的就是预备位，于是「装到位」会停在离真正位置一个 gap 的地方，
+   * 而且每备一次就再偏一截。加载完成时全车是合装态，那一帧的值才是对的。
+   */
+  #home(obj) {
+    if (!obj.userData.homePos) obj.userData.homePos = obj.position.clone();
+    return obj.userData.homePos;
+  }
+
+  /**
    * 把一个 BOM 件备好。一件可能对应多个节点（车把是把横、两侧把套、两只刹把共五个），
    * 整组一起动才不会散架。
    *
    * 位移在各节点**自己的父空间**里算：清单给的是世界方向，而这些节点挂在
-   * Lenker → Federung 这类带旋转的父级下面，把世界向量直接加到 position 上会歪掉。
+   * Lenker → Federung、Kurbel → Pedale 这类带旋转的父级下面 —— 实测每一件的
+   * 父级基底都不是单位阵，把世界向量直接加到 position 上，前轮会横着飞出去 19 cm。
    * 用两次 worldToLocal 相减取出这一米世界位移在父空间里的样子，父级带缩放也算得对。
    */
   #rig(id) {
+    const hit = this._rigs.get(id);
+    if (hit) return hit;
+
     const part = this.ctx.bom.part(id);
     if (!part?.install) throw new Error(`[slide] 清单里没有 ${id}，或它缺 install 段`);
     const { dir, gap, snap } = part.install;
     const d = new THREE.Vector3(...dir).normalize();
 
-    const box = new THREE.Box3();
     const nodes = part.nodes.map((name) => {
       const obj = this.ctx.bike.get(name);
-      box.union(this.ctx.bike.boundsOf(name));
       let step = d.clone();
       if (obj.parent) {
         obj.parent.updateWorldMatrix(true, false);
         const o = obj.parent.worldToLocal(new THREE.Vector3());
         step = obj.parent.worldToLocal(d.clone()).sub(o);
       }
-      return { obj, home: obj.position.clone(), step };
+      return { obj, home: this.#home(obj), step };
     });
 
-    const center = box.isEmpty()
+    const rig = { id, name: part.name, dir: d, gap, snap, nodes, center: null, u: 1 };
+
+    // 形心要在**合装态**下量：件此刻可能正停在预备位，照那个量出来的中心
+    // 会把方向箭头再往外推一个 gap，指到车外面去
+    this.#setU(rig, 1);
+    const box = new THREE.Box3();
+    for (const n of nodes) box.union(new THREE.Box3().setFromObject(n.obj));
+    rig.center = box.isEmpty()
       ? nodes[0].obj.getWorldPosition(new THREE.Vector3())
       : box.getCenter(new THREE.Vector3());
-    return { id, name: part.name, dir: d, gap, snap, nodes, center, u: 1 };
+    this._rigs.set(id, rig);
+    return rig;
+  }
+
+  /**
+   * 不开会话，只把一件摆在预备位（u=0）与装配位（u=1）之间。
+   *
+   * 步骤脚本铺场与收场都走这一个入口 —— 换算到父空间这件事只有这里做对过一次，
+   * 各处自己拿 install.dir 去加减世界向量，件就会飞到车外面。
+   */
+  park(partId, u) {
+    this.#setU(this.#rig(partId), Math.max(0, Math.min(1, u)));
+  }
+
+  /**
+   * 把一件沿「它是从哪儿来的」方向推开这么多米 —— 爆炸视图。
+   *
+   * 借的还是同一条换算：每件退开的方向就是它装进来的方向取反，
+   * 于是整车摊开之后，每一件恰好停在它该来的那一侧，而不是胡乱炸开。
+   * 走 park 是不行的：那个入口把 u 夹在 [0,1] 里，故意不让件飞出车外。
+   */
+  explode(partId, metres) {
+    const rig = this.#rig(partId);
+    this.#setU(rig, 1 - metres / rig.gap);
   }
 
   /** u = 1 是装到位，u = 0 是预备位（沿 -dir 退 gap）。整组节点同时写 */
@@ -165,7 +214,13 @@ export class Slide {
     if (!s) return;
     this.ctx.guides?.set([...s.pending].map((id) => {
       const rig = s.items.get(id);
-      return { pos: rig.center.clone().addScaledVector(rig.dir, -rig.gap), dir: rig.dir.clone() };
+      return {
+        pos: rig.center.clone().addScaledVector(rig.dir, -rig.gap),
+        dir: rig.dir.clone(),
+        // 箭头按行程长短定大小。写死 5 cm 的话，它在 0.7 m 的前轮上只有轮径的 7%，
+        // 混在辐条与碟片里根本看不出是个箭头 —— 而它是「往哪儿使劲」的唯一答案
+        len: Math.max(0.05, rig.gap * 0.6),
+      };
     }));
   }
 
@@ -176,7 +231,9 @@ export class Slide {
     this.ctx.bike.clearHighlights?.();
     for (const id of s.pending) {
       for (const n of s.items.get(id).nodes) {
-        this.ctx.bike.highlight?.(n.obj.name, ACCENT, id === near ? 0.4 : 0.14);
+        // 自发光只加到「认得出是同一个零件」为止。再高一档，深色主题下
+        // 碳纹与阳极氧化会被烧成一片橙，看着像换了个零件而不是同一个被点亮
+        this.ctx.bike.highlight?.(n.obj.name, ACCENT, id === near ? 0.3 : 0.1);
       }
     }
   }
@@ -326,7 +383,7 @@ export class Slide {
       const rig = s.items.get(id);
       rig.snap = Math.max(rig.snap, rig.gap * K.RELAX);
     }
-    this.ctx.hud?.setAlts([{ label: '帮我装上', onClick: () => this.autoSeat() }]);
+    this.ctx.hud?.setAlts([{ label: '帮我装上', ico: 'wrench', onClick: () => this.autoSeat() }]);
   }
 
   /**
@@ -354,8 +411,9 @@ export class Slide {
     s.pending.delete(partId);
     s.seated += 1;
     s.fails = 0;
-    // 结尾自检按这张表点名，装没装上不看画面看它
-    if (this.ctx.state?.installed) this.ctx.state.installed[partId] = true;
+    // 结尾自检按这张表点名，装没装上不看画面看它。
+    // 整个换掉而不是就地改：状态是 Proxy，就地改不触发落盘与监听
+    this.ctx.state.installed = { ...this.ctx.state.installed, [partId]: true };
     s.onSeat?.(partId, s.seated, s.total);
 
     if (s.pending.size) {

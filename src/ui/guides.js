@@ -6,6 +6,7 @@
  */
 
 import * as THREE from 'three';
+import { reducedMotion } from '../util/tween.js';
 
 const MAT = new THREE.MeshBasicMaterial({
   color: 0xd8642a, transparent: true, opacity: 0.85, depthTest: false,
@@ -58,9 +59,21 @@ export class Arrows {
     this.items.length = 0;
   }
 
-  /** 沿自身方向来回一点点。幅度取箭头长度的比例，远近都看得出在动 */
+  /**
+   * 沿自身方向来回一点点。幅度取箭头长度的比例，远近都看得出在动。
+   *
+   * 用户要求减少动效时停在最亮的那一帧，不是停在半透明处 ——
+   * 这一枚箭头是「往哪儿使劲」的唯一答案，先得看得清，其次才是会不会动。
+   */
   update(dt) {
     if (!this.items.length) return;
+    if (reducedMotion()) {
+      for (const a of this.items) {
+        a.position.copy(a.userData.base);
+        a.children.forEach((c) => { c.material.opacity = 0.9; });
+      }
+      return;
+    }
     this.t += dt;
     const k = (Math.sin(this.t * 3.4) * 0.5 + 0.5);
     for (const a of this.items) {
