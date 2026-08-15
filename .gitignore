@@ -1,0 +1,7 @@
+node_modules/
+dist/
+.shots/
+.analysis/
+.vercel/
+*.local
+.DS_Store
