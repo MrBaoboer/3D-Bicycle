@@ -18,7 +18,9 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  构建:
+  # 作业 id 必须是 ASCII —— 中文 id 会让工作流在解析阶段直接失败
+  build:
+    name: 构建
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -37,8 +39,9 @@ jobs:
         with:
           path: dist
 
-  部署:
-    needs: 构建
+  deploy:
+    name: 部署
+    needs: build
     runs-on: ubuntu-latest
     environment:
       name: github-pages

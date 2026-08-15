@@ -10,7 +10,10 @@ on:
 # 冒烟只在推到 main 之后跑或手动触发（分钟级）——
 # 不让每个 PR 为一次浏览器走查等上几分钟。
 jobs:
-  工具链:
+  # 作业 id 必须是 ASCII（字母数字与 - _）—— 中文 id 会让整个工作流在解析阶段就失败，
+  # 而且报的是「workflow file issue」，看不出是哪一行。中文放 name。
+  toolchain:
+    name: 工具链
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -31,7 +34,8 @@ jobs:
           PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
       - run: npm run check:code
 
-  冒烟:
+  smoke:
+    name: 冒烟
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     steps:
