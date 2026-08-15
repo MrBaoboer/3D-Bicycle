@@ -24,7 +24,13 @@ function detach(ctx, partId) {
   }
 }
 
-/** 复位到装配位 */
+/**
+ * 复位到装配位。
+ *
+ * 翻页离开时必须调 —— 没装完就走，零件会永远悬在半空，
+ * 而后面每一步的画面里都杵着一个飘着的轮子。
+ * 装没装上由 state.installed 记账，与画面上摆在哪儿是两回事。
+ */
 function reattach(ctx, partId) {
   for (const name of ctx.bom.nodesOf(partId)) {
     const o = ctx.bike.get(name);
@@ -81,14 +87,14 @@ export function acts(ctx) {
         body: '抬起来之前先看一眼：刹车碟得从卡钳的两片来令片之间穿过去。'
           + '对不准就硬推，会把来令片顶歪。',
       },
-      async enter(c, engine) {
+      enter(c, engine) {
         detach(c, 'front-wheel');
-        await installPart(c, 'front-wheel', {
+        installPart(c, 'front-wheel', {
           hint: '顺着叉腿往上抬，不是横着推',
           onDone: () => { c.hud.toast('轮轴到底了'); engine.done(); },
         });
       },
-      exit(c) { c.slide.cancel(); },
+      exit(c) { c.slide.cancel(); reattach(c, 'front-wheel'); },
     },
     {
       id: 'B2', phase: 1,
@@ -134,14 +140,14 @@ export function acts(ctx) {
         body: '车把中间有一圈刻度，让它左右等长再压面盖。'
           + '偏了骑起来会一直觉得身子是歪的，而这件事装的时候两秒，回头再调要拆四颗螺丝。',
       },
-      async enter(c, engine) {
+      enter(c, engine) {
         detach(c, 'handlebar');
-        await installPart(c, 'handlebar', {
+        installPart(c, 'handlebar', {
           hint: '往车身方向推，不是往上抬',
           onDone: () => engine.done(),
         });
       },
-      exit(c) { c.slide.cancel(); },
+      exit(c) { c.slide.cancel(); reattach(c, 'handlebar'); },
     },
     {
       id: 'C2', phase: 2,
@@ -199,14 +205,14 @@ export function acts(ctx) {
           + '插浅了，立管口就成了一个杠杆支点 —— 骑起来的力全集中在那一圈，车架会从那儿裂开。'
           + '这条线不是建议。',
       },
-      async enter(c, engine) {
+      enter(c, engine) {
         detach(c, 'seatpost');
-        await installPart(c, 'seatpost', {
+        installPart(c, 'seatpost', {
           hint: '顺着立管的方向压下去',
           onDone: () => engine.done(),
         });
       },
-      exit(c) { c.slide.cancel(); },
+      exit(c) { c.slide.cancel(); reattach(c, 'seatpost'); },
     },
 
     // ══════════════ 脚踏 ══════════════

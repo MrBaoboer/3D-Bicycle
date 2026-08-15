@@ -14,27 +14,36 @@ export const V = (x, y, z) => new THREE.Vector3(x, y, z);
  * （见 git 历史里那次 `fit()` 探针），留了 1.12–1.25 倍余量。
  */
 export const AIM_BIKE = [-0.026, 0.560, 0];
-export const FIT_BIKE = { r: 1.083, h: 0.627 };
+export const FIT_BIKE = { r: 1.025, h: 0.594 };
 
-export const AIM_FRONT = [-0.567, 0.536, 0];
-export const FIT_FRONT = { r: 0.478, h: 0.600 };
+export const AIM_FRONT = [-0.567, 0.427, 0];
+export const FIT_FRONT = { r: 0.490, h: 0.490 };
 
-export const AIM_BAR = [-0.312, 0.885, 0];
-export const FIT_BAR = { r: 0.442, h: 0.264 };
+/**
+ * 车把与把立。**必须用把立自己那块网格 `Vorbau_Hope_FR_35mm_27679`**，
+ * 不能用同名的父节点 —— 那棵子树连车把带前叉一并算进去，
+ * 量出来的中心会往下沉六七厘米，镜头就对到车架上去了。
+ */
+export const AIM_BAR = [-0.235, 1.069, 0];
+export const FIT_BAR = { r: 0.454, h: 0.100 };
 
-/** 把立本体特写：用把立自己那块网格，不要用父节点（那棵子树连车把带前叉都算进去） */
-export const AIM_STEM = [-0.234, 0.989, 0.016];
-export const FIT_STEM = { r: 0.075, h: 0.060 };
+/**
+ * 面盖那一步瞄的是**四颗螺丝的形心**，不是把立本体中心 ——
+ * 这一步的主角是螺丝，把立只是它们所在的那块铁。
+ * 形心 = 清单里 stem-face-* 四个 point 的平均。
+ */
+export const AIM_STEM = [-0.252, 1.063, 0];
+export const FIT_STEM = { r: 0.105, h: 0.090 };
 
 export const AIM_SEAT = [0.306, 0.867, 0];
-export const FIT_SEAT = { r: 0.161, h: 0.192 };
+export const FIT_SEAT = { r: 0.165, h: 0.198 };
 
 export const AIM_CRANK = [0.184, 0.399, 0];
 export const FIT_CRANK = { r: 0.215, h: 0.137 };
 
 export const AIM_PEDAL_L = [0.108, 0.356, 0.068];
-export const FIT_PEDAL = { r: 0.155, h: 0.098 };
 export const AIM_PEDAL_R = [0.260, 0.443, -0.123];
+export const FIT_PEDAL = { r: 0.155, h: 0.098 };
 
 /** 参数卡的标准行 */
 export const row = (k, v) => [k, v];
@@ -65,21 +74,23 @@ export class Junk {
 
 /**
  * 装配一件的标准流程：亮起目标 → 交给 slide → 到位收尾。
- * 各步只需给 partId 与到位后的话，不必每次重写这十几行。
+ *
+ * **绝对不能返回一个「等用户装完才兑现」的 Promise。**
+ * 引擎的 go() 会 await 每一步的 enter()，而 enter 的职责只是把这一步铺开；
+ * 一旦在里面等用户动手，engine.busy 就永远不落 —— 翻页、冒烟、自动路径全部卡死。
+ * 到位之后要做什么，走 onDone 回调。
  */
-export async function installPart(ctx, partId, { onDone, hint } = {}) {
+export function installPart(ctx, partId, { onDone, hint } = {}) {
   const part = ctx.bom.part(partId);
-  ctx.bike.highlight(partId, 0xd8642a, 0.16);
-  return new Promise((resolve) => {
-    ctx.slide.begin({
-      partId,
-      wrongHint: hint,
-      onAll: () => {
-        ctx.bike.highlight(partId, 0xd8642a, 0);
-        ctx.state.installed = { ...ctx.state.installed, [partId]: true };
-        onDone?.(part);
-        resolve(part);
-      },
-    });
+  ctx.bike.highlight(ctx.bom.nodesOf(partId), 0xd8642a, 0.16);
+  ctx.slide.begin({
+    partId,
+    wrongHint: hint,
+    onAll: () => {
+      ctx.bike.highlight(ctx.bom.nodesOf(partId), 0xd8642a, 0);
+      ctx.state.installed = { ...ctx.state.installed, [partId]: true };
+      onDone?.(part);
+    },
   });
+  return part;
 }

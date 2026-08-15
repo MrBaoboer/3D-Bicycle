@@ -1,0 +1,337 @@
+/*
+ * 常驻界面
+ *
+ * 布局只有两条横边：顶上一行「走到哪了」，底下一条操作条。
+ * 中间整块是车，屏幕左右两侧一个控件都不放 —— 那是手指转画面的地方。
+ * 封面在 src/styles.css，那份先加载，这里不重复。
+ */
+
+/* ═══════════════ 顶部 · 章节与步骤 ═══════════════ */
+
+#topbar {
+  position: fixed; top: 0; left: 0; right: 0; z-index: var(--z-bar);
+  padding: var(--pad-top) var(--pad-right) var(--s3) var(--pad-left);
+  pointer-events: none;
+  /* 顶上不做实底，一层由上往下的渐隐够读，也不挡画面 */
+  background: var(--scrim);
+  transition: opacity var(--t-slow) var(--ease);
+}
+#topbar[data-quiet="1"] { opacity: 0; }
+
+/* 每章一段，段里每一步一格。哪一格都点得到 —— 它同时是进度条和目录 */
+.chapters { display: flex; gap: var(--s4); pointer-events: auto; }
+/* flex-grow 由界面层按这一章有几步写入 —— 见 hud.setChapters() */
+.ch { flex: 1 1 0; min-width: 0; }
+.ch-ticks { display: flex; gap: 3px; }
+
+/* 视觉上只有 2px 的一道线，命中区留高 —— 手指点得中 */
+.tick {
+  flex: 1; height: 22px;
+  display: flex; align-items: flex-start;
+  position: relative;
+}
+@media (pointer: coarse) { .tick { height: 32px; } }
+
+/* 三种状态各自要能看清：未到达是一道墨线，走过的是减一档的橙，当下是满橙加高
+   一格。--accent-soft 压在台面上只有 1.4:1，低于非文本 3:1 的下限，
+   用它做「走过」的话进度条读起来只剩「当下」一个状态 */
+.tick::before {
+  content: ''; display: block; width: 100%; height: 2px;
+  background: var(--text-3);
+  border-radius: 1px;
+  transition: background var(--t-base) var(--ease), height var(--t-fast) var(--ease);
+}
+.tick[data-state="done"]::before { background: var(--accent-mid); }
+.tick[data-state="now"]::before  { background: var(--accent); height: 4px; }
+@media (hover: hover) {
+  .tick:hover::before { background: var(--accent); height: 4px; }
+}
+.tick:focus-visible::before { background: var(--accent); height: 4px; }
+
+.ch-nm {
+  display: block; margin-top: -2px;
+  font-size: var(--fs-mark); letter-spacing: var(--ls-base);
+  color: var(--text-2);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  transition: color var(--t-base) var(--ease);
+}
+.ch[data-on="1"] .ch-nm { color: var(--text); font-weight: 600; }
+
+/* 悬停时告诉你那一格是哪一步 */
+.tick-tip {
+  position: fixed; z-index: var(--z-menu);
+  transform: translate(-50%, 0);
+  padding: 6px var(--s3);
+  border-radius: var(--r-xs);
+  background: var(--surface); color: var(--text);
+  font-size: var(--fs-mini); white-space: nowrap;
+  box-shadow: var(--hair), var(--lift-2);
+  pointer-events: none;
+  animation: fade var(--t-fast) var(--ease) both;
+}
+.tick-tip b { font-family: var(--mono); font-weight: 400; color: var(--text-3); margin-right: var(--s2); }
+
+.toprow {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: var(--s4); margin-top: var(--s3);
+  pointer-events: auto;
+}
+.where { display: flex; align-items: baseline; gap: var(--s3); min-width: 0; }
+.stepno {
+  font-family: var(--mono); font-variant-numeric: tabular-nums;
+  font-size: var(--fs-mark); letter-spacing: var(--ls-tight);
+  color: var(--text-3); flex: none;
+}
+.steptitle {
+  font-size: var(--fs-tiny); font-weight: 600; letter-spacing: var(--ls-base);
+  color: var(--text);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+/* ═══════════════ 底部条 ═══════════════ */
+
+/*
+ * 三样东西按重要性从上往下摞：这一步该怎么动手、要按的那一个按钮、降级入口。
+ * 条子自己不吃指针事件 —— 按钮之间的空当仍然可以按住转画面，
+ * 否则屏幕最下面这一横条就成了一片按不动的死区。
+ */
+#bottom {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: var(--z-bar);
+  display: flex; flex-direction: column; align-items: center;
+  gap: var(--s2);
+  /* 左右各让出一个翻页的宽度，任务按钮再长也不会钻到箭头底下 */
+  padding: var(--s3) calc(var(--pad-right) + 56px) var(--pad-bottom) calc(var(--pad-left) + 56px);
+  background: var(--bar);
+  /* 不加前缀的写法要到 Safari 18 才有，之前只认 -webkit- */
+  -webkit-backdrop-filter: blur(20px) saturate(1.4);
+  backdrop-filter: blur(20px) saturate(1.4);
+  box-shadow: 0 -1px 0 var(--line-2);
+  pointer-events: none;
+  transition: opacity var(--t-slow) var(--ease);
+}
+#bottom > * { pointer-events: auto; }
+#bottom[data-quiet="1"] { opacity: 0; pointer-events: none; }
+
+/* 操作提示：这一步手该怎么动。<em> 标动作词，<b> 标计数 */
+.cue {
+  display: flex; align-items: center; gap: var(--s2);
+  min-height: 18px; text-align: center;
+  font-size: var(--fs-mini); letter-spacing: var(--ls-base);
+  color: var(--text-2);
+  transition: opacity var(--t-base) var(--ease);
+}
+.cue:empty { opacity: 0; }
+.cue .ico { width: 15px; height: 15px; color: var(--accent-mid); }
+.cue em { font-style: normal; color: var(--accent); font-weight: 600; }
+.cue b {
+  font-family: var(--mono); font-weight: 400;
+  font-variant-numeric: tabular-nums; color: var(--text);
+}
+
+/* 任务按钮与它旁边的降级入口。同一时刻至多一个任务按钮 */
+.actions {
+  display: flex; align-items: center; justify-content: center;
+  gap: var(--s3); min-height: 46px; flex-wrap: wrap;
+}
+.alts { display: flex; align-items: center; gap: var(--s1); }
+
+/* ═══════════════ 两角翻页 ═══════════════ */
+
+/*
+ * 固定在屏幕两个下角，与底部条同高。用 fixed 而不是塞进条子里排版：
+ * 条子的高度随提示行有无而变，箭头不该跟着上下跳。
+ */
+.nav {
+  position: fixed; bottom: var(--pad-bottom); z-index: var(--z-nav);
+  display: grid; place-items: center;
+  width: 46px; height: 46px; border-radius: 50%;
+  color: var(--text-2);
+  background: var(--surface);
+  box-shadow: var(--hair), var(--lift-1);
+  transition: color var(--t-base) var(--ease),
+              box-shadow var(--t-base) var(--ease),
+              opacity var(--t-base) var(--ease);
+}
+.nav .ico {
+  width: 22px; height: 22px; stroke-width: 1.4;
+  transition: transform var(--t-fast) var(--ease);
+}
+.nav-prev { left: max(var(--s3), calc(var(--pad-left) - 4px)); }
+.nav-next { right: max(var(--s3), calc(var(--pad-right) - 4px)); }
+
+@media (hover: hover) {
+  .nav:hover:not(:disabled) { color: var(--accent); box-shadow: var(--hair-on), var(--lift-2); }
+  .nav-prev:hover:not(:disabled) .ico { transform: translateX(-3px); }
+  .nav-next:hover:not(:disabled) .ico { transform: translateX(3px); }
+}
+.nav:disabled { opacity: 0.28; }
+#bottom[data-quiet="1"] ~ .nav { opacity: 0; pointer-events: none; }
+
+/* 手指够得着优先于好看 */
+@media (pointer: coarse) {
+  .nav { width: 52px; height: 52px; }
+  .nav .ico { width: 24px; height: 24px; }
+}
+
+/* 这一步做完了，右边那枚亮一下。
+   除了变橙还多描一圈 —— 减少动效时那段位移被关掉，只剩颜色就成了
+   「唯一靠辨色传达的信息」，一圈描边是形状上的差别 */
+.nav.ready { color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft), var(--lift-2); }
+.nav.ready .ico { animation: nav-ready 1.5s var(--ease) 2; }
+@keyframes nav-ready {
+  0%, 100% { transform: translateX(0); }
+  50%      { transform: translateX(5px); }
+}
+
+/* ═══════════════ 说明卡 ═══════════════ */
+
+/*
+ * 右上角一张卡，写这一步的规格与「为什么」。
+ * 宽屏上不吃指针事件 —— 隔着它也能按住转画面。
+ */
+.note {
+  position: fixed; right: var(--pad-right); top: calc(var(--pad-top) + 74px);
+  z-index: var(--z-note);
+  width: min(280px, 32vw);
+  padding: var(--s4) var(--s5);
+  color: var(--text);
+  background: var(--surface);
+  border-radius: var(--r-sm);
+  box-shadow: var(--hair), var(--lift-2);
+  animation: note-in var(--t-slow) var(--ease) both;
+  pointer-events: none;
+}
+@keyframes note-in { from { opacity: 0; transform: translateY(-8px); } }
+
+.note-hd {
+  font-size: var(--fs-mid); font-weight: 600; letter-spacing: var(--ls-base);
+  margin-bottom: var(--s3);
+}
+.note p { font-size: var(--fs-tiny); line-height: var(--lh-body); color: var(--text-2); }
+.note p + p { margin-top: var(--s2); }
+.note em { font-style: normal; color: var(--accent); font-weight: 600; }
+
+/* 规格行：中间用点线牵住，比表格轻，比并排清楚 */
+.note-spec { margin: 0 0 var(--s3); }
+.note-spec .sp {
+  display: flex; align-items: baseline; gap: var(--s2);
+  font-size: var(--fs-tiny); color: var(--text-2);
+  padding: 3px 0;
+}
+.note-spec .sp i {
+  flex: 1; height: 0;
+  border-bottom: 1px dotted var(--line);
+  transform: translateY(-3px);
+}
+.note-spec .sp b {
+  font-family: var(--mono); font-weight: 400;
+  font-variant-numeric: tabular-nums;
+  font-size: var(--fs-tiny); color: var(--accent); white-space: nowrap;
+}
+
+.note-foot {
+  margin-top: var(--s3); padding-top: var(--s3);
+  border-top: 1px solid var(--line-2);
+  font-size: var(--fs-mini); line-height: var(--lh-tight);
+  color: var(--text-3);
+}
+
+/* 窄屏折成右缘一枚卡角，点开才展开 —— 内容一句不少 */
+.note-tab {
+  position: fixed; right: var(--sa-right); top: 38vh; z-index: var(--z-note);
+  display: none; align-items: center;
+  padding: var(--s3) var(--s2);
+  border-radius: var(--r-xs) 0 0 var(--r-xs);
+  background: var(--surface); color: var(--text-2);
+  font-size: var(--fs-mark); letter-spacing: var(--ls-wide);
+  writing-mode: vertical-rl;
+  box-shadow: var(--hair), var(--lift-2);
+}
+@media (pointer: coarse) { .note-tab { padding: var(--s4) var(--s3); } }
+
+/* ═══════════════ 短提示 ═══════════════ */
+
+.toast {
+  position: fixed; left: 50%; top: 18%; z-index: var(--z-toast);
+  transform: translateX(-50%);
+  max-width: min(520px, 84vw);
+  padding: var(--s2) var(--s5);
+  border-radius: var(--r-full);
+  pointer-events: none; text-align: center;
+  font-size: var(--fs-mid); letter-spacing: var(--ls-base); line-height: var(--lh-tight);
+  color: var(--text);
+  background: var(--surface);
+  box-shadow: var(--hair), var(--lift-2);
+  animation: toast-in var(--t-base) var(--ease) both;
+}
+.toast.go   { color: var(--go);   box-shadow: inset 0 0 0 1px var(--go),   var(--lift-2); }
+.toast.stop { color: var(--stop); box-shadow: inset 0 0 0 1px var(--stop), var(--lift-2); }
+@keyframes toast-in { from { opacity: 0; transform: translateX(-50%) translateY(8px); } }
+
+@keyframes fade { from { opacity: 0; } }
+
+/* ═══════════════ 窄屏 ═══════════════ */
+
+@media (max-width: 900px) {
+  .ch-nm { display: none; }
+  .chapters { gap: var(--s3); }
+  .note { width: min(252px, 42vw); padding: var(--s4); }
+}
+
+@media (max-width: 680px) {
+  #topbar { padding-bottom: var(--s2); }
+  #bottom {
+    padding-left: calc(var(--s3) + var(--sa-left) + 52px);
+    padding-right: calc(var(--s3) + var(--sa-right) + 52px);
+  }
+  .nav-prev { left: calc(var(--s3) + var(--sa-left)); }
+  .nav-next { right: calc(var(--s3) + var(--sa-right)); }
+
+  /* 卡从顶部落下，横铺满宽。这一档要能滚，指针事件就得收回来 */
+  .note {
+    left: calc(var(--s3) + var(--sa-left)); right: calc(var(--s3) + var(--sa-right));
+    top: calc(var(--pad-top) + 58px);
+    width: auto; max-height: 44vh; overflow-y: auto;
+    padding: var(--s4);
+    pointer-events: auto;
+  }
+  .note-tab { display: flex; }
+  .toast { top: 14%; font-size: var(--fs-base); }
+}
+
+/*
+ * 横过来的手机 —— 按高度判，不按宽度。
+ * 844×390 在宽度上跟平板一样宽，走的是桌面那一套；可它竖向只有 390，
+ * 顶上一行加底下一条能吃掉半屏，车就被挤成一条。
+ * 这一档条子整体压薄：提示与按钮各降一档，上下留白收到 --s2。
+ */
+@media (max-height: 540px) and (orientation: landscape) {
+  .ch-nm { display: none; }
+  #topbar {
+    padding-top: max(var(--s2), var(--sa-top));
+    padding-bottom: var(--s2);
+  }
+  .toprow { margin-top: var(--s2); }
+  /* 命中区收到 24 —— 竖向本来就不够，翻页另有底部两角顶着 */
+  .tick { height: 24px; }
+
+  #bottom {
+    gap: var(--s1);
+    padding-top: var(--s2);
+    padding-bottom: max(var(--s2), var(--sa-bottom));
+  }
+  .cue { min-height: 14px; font-size: var(--fs-mark); }
+  .actions { min-height: 36px; }
+  .nav { width: 40px; height: 40px; bottom: max(var(--s2), var(--sa-bottom)); }
+  .nav .ico { width: 20px; height: 20px; }
+
+  /* 卡改成可滚（定高装不下），而指针事件一收回来它就会挡住右边那枚翻页 ——
+     所以整张卡往里让出一个箭头的宽度 */
+  .note {
+    top: calc(max(var(--s2), var(--sa-top)) + 44px);
+    right: calc(var(--pad-right) + 48px);
+    width: min(240px, 34vw); max-height: 60vh;
+    overflow-y: auto; pointer-events: auto; padding: var(--s3) var(--s4);
+  }
+  .toast { top: 9%; }
+}

@@ -1,0 +1,218 @@
+/*
+ * 覆盖层
+ *
+ * 两种形态：
+ *   卷（sheet）—— 盖住画面，讲一件需要专心看的事；
+ *   坞（dock）—— 停在底部条上方，把车完整让出来。
+ */
+
+.overlay {
+  position: fixed; inset: 0; z-index: var(--z-overlay);
+  display: flex; align-items: center; justify-content: center;
+  animation: fade var(--t-base) var(--ease) both;
+}
+.overlay.veil {
+  background: var(--veil);
+  -webkit-backdrop-filter: blur(20px);
+  backdrop-filter: blur(20px);
+}
+/* 坞用的那一档：不铺底，手还在画面上 */
+.overlay.bare { background: none; pointer-events: none; }
+.overlay.bare .sheet, .overlay.bare .dock { pointer-events: auto; }
+
+/* ═══════════════ 卷 ═══════════════ */
+
+.sheet {
+  width: min(640px, 86vw); max-height: 82vh;
+  overflow-y: auto; overscroll-behavior: contain;
+  padding: var(--s2) var(--s1);
+  text-align: center;
+  animation: sheet-in var(--t-slow) var(--ease) both;
+}
+@keyframes sheet-in { from { opacity: 0; transform: translateY(12px); } }
+
+.sheet-title {
+  font-size: var(--fs-head); font-weight: 600;
+  letter-spacing: var(--ls-wide);
+  color: var(--text);
+  margin-top: var(--s3);
+}
+.sheet-lede {
+  max-width: 32em; margin: var(--s3) auto 0;
+  font-size: var(--fs-tiny); line-height: var(--lh-body);
+  color: var(--text-2);
+}
+.sheet-body { margin-top: var(--s6); }
+
+.sheet-act {
+  display: flex; align-items: center; justify-content: center; gap: var(--s3);
+  flex-wrap: wrap; margin-top: var(--s6);
+}
+
+/* ═══════════════ 坞 ═══════════════ */
+
+/*
+ * 坞停在底部条上方。--bar-h 是界面层实测的条高 ——
+ * 条子的高度随提示行有无、随横竖屏而变，写死一个数就会压上去或者飘着。
+ */
+.dock {
+  position: fixed; left: 0; right: 0;
+  bottom: calc(var(--bar-h, 0px) + var(--s3));
+  display: flex; flex-direction: column; align-items: center; gap: var(--s3);
+  padding-left: calc(var(--pad-left) + 56px);
+  padding-right: calc(var(--pad-right) + 56px);
+  animation: dock-in var(--t-base) var(--ease) both;
+}
+@keyframes dock-in { from { opacity: 0; transform: translateY(10px); } }
+
+.dock-row {
+  display: flex; align-items: center; gap: var(--s2);
+  flex-wrap: wrap; justify-content: center;
+}
+.dock-hint {
+  font-size: var(--fs-mini); letter-spacing: var(--ls-base);
+  color: var(--text-3); text-align: center;
+}
+
+/* ═══════════════ 开箱清点 ═══════════════ */
+
+/*
+ * 箱子里有什么：五个大件加七颗紧固件一次摆完。
+ * 等宽等高，谁也不比谁更值得先装 —— 顺序由步骤决定，不由卡片大小暗示。
+ */
+.bom {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(112px, 1fr));
+  gap: var(--s2);
+  width: min(100%, 620px); margin: 0 auto;
+}
+
+.bom-item {
+  position: relative;
+  display: flex; flex-direction: column; align-items: center; gap: var(--s1);
+  padding: var(--s4) var(--s2);
+  border-radius: var(--r-sm); text-align: center;
+  background: var(--surface);
+  box-shadow: var(--hair), var(--lift-1);
+  transition: box-shadow var(--t-base) var(--ease), color var(--t-base) var(--ease);
+}
+.bom-item .ico { width: 26px; height: 26px; stroke-width: 1.2; color: var(--text-3); }
+.bom-nm { font-size: var(--fs-tiny); color: var(--text); }
+.bom-qty {
+  font-family: var(--mono); font-variant-numeric: tabular-nums;
+  font-size: var(--fs-mark); color: var(--text-3);
+}
+
+/* 装完的件打一道橙边，图标跟着变色 —— 不只靠颜色，边框是形状上的差别 */
+.bom-item[data-state="done"] { box-shadow: inset 0 0 0 2px var(--accent), var(--lift-1); }
+.bom-item[data-state="done"] .ico { color: var(--accent); }
+.bom-item[data-state="now"] { box-shadow: var(--hair-on), var(--lift-2); }
+
+/* ═══════════════ 规格清单 ═══════════════ */
+
+/* 扭矩、螺距、圈数这类数放右边，中间用点线牵住：比表格轻，比并排清楚 */
+.spec { max-width: 400px; margin: 0 auto; text-align: left; }
+.spec .sp {
+  display: flex; align-items: baseline; gap: var(--s3);
+  padding: 9px 0;
+  font-size: var(--fs-tiny); color: var(--text-2);
+}
+.spec .sp i { flex: 1; height: 0; border-bottom: 1px dotted var(--line); transform: translateY(-4px); }
+.spec .sp b {
+  font-family: var(--mono); font-weight: 400;
+  font-variant-numeric: tabular-nums;
+  font-size: var(--fs-base); color: var(--text); white-space: nowrap;
+}
+.spec .sp.hi b { color: var(--accent); }
+.spec .sp.sum { margin-top: var(--s2); padding-top: var(--s4); border-top: 1px solid var(--line); }
+
+/* ═══════════════ 工具 ═══════════════ */
+
+/* 这一步要拿哪几把。工具代号（hex-4 / wrench-15）走等宽，中文名跟在后面 */
+.kit { display: flex; gap: var(--s2); flex-wrap: wrap; justify-content: center; }
+.tool {
+  display: inline-flex; align-items: center; gap: var(--s2);
+  padding: 7px var(--s3) 7px var(--s2);
+  border-radius: var(--r-full);
+  font-size: var(--fs-mini); color: var(--text-2);
+  background: var(--surface);
+  box-shadow: var(--hair);
+}
+.tool .ico { width: 16px; height: 16px; color: var(--text-3); }
+.tool b {
+  font-family: var(--mono); font-weight: 400;
+  font-size: var(--fs-mark); color: var(--text-3);
+}
+.tool[data-state="now"] { color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.tool[data-state="now"] .ico, .tool[data-state="now"] b { color: var(--accent); }
+
+/* ═══════════════ 骑走之前 ═══════════════ */
+
+/* 最后一屏的自检：每一条都是「亲手确认过」，所以做成可点的行，不是死清单 */
+.checks { max-width: 400px; margin: 0 auto; text-align: left; }
+.check {
+  display: flex; align-items: center; gap: var(--s3);
+  width: 100%; padding: var(--s3) var(--s2);
+  font-size: var(--fs-tiny); color: var(--text-2);
+  border-radius: var(--r-xs);
+  transition: color var(--t-base) var(--ease), background var(--t-fast) var(--ease);
+}
+.check + .check { border-top: 1px solid var(--line-2); }
+.check::before {
+  content: ''; flex: none;
+  width: 18px; height: 18px; border-radius: var(--r-xs);
+  box-shadow: inset 0 0 0 1.5px var(--text-3);
+  transition: box-shadow var(--t-base) var(--ease), background var(--t-base) var(--ease);
+}
+.check[aria-pressed="true"] { color: var(--text); }
+.check[aria-pressed="true"]::before {
+  background: var(--go); box-shadow: inset 0 0 0 1.5px var(--go);
+}
+@media (hover: hover) { .check:hover { background: var(--shade); } }
+@media (pointer: coarse) { .check { padding: var(--s4) var(--s2); } }
+
+/* ═══════════════ 装完了 ═══════════════ */
+
+.finale {
+  font-size: var(--fs-hero); font-weight: 600;
+  letter-spacing: var(--ls-wide);
+  line-height: 1.5; color: var(--text);
+}
+
+/* ═══════════════ 触屏 ═══════════════ */
+
+/*
+ * 触屏没有真正的悬停：点一下之后 :hover 会一直粘着，那一行就停在高亮态、
+ * 像是被选中了。所有悬停反馈在这里取消，按下的反馈交给 :active。
+ */
+@media (hover: none) {
+  .check:hover { background: none; }
+  .bom-item:active, .check:active, .tool:active { opacity: 0.7; }
+}
+
+/* ═══════════════ 窄屏与横过来的手机 ═══════════════ */
+
+@media (max-width: 680px) {
+  .dock {
+    padding-left: calc(var(--s3) + var(--sa-left));
+    padding-right: calc(var(--s3) + var(--sa-right));
+  }
+  .sheet { width: min(100%, 92vw); }
+  .sheet-body { margin-top: var(--s5); }
+  .sheet-act { margin-top: var(--s5); }
+  .bom { grid-template-columns: repeat(auto-fit, minmax(92px, 1fr)); }
+  .bom-item { padding: var(--s3) var(--s1); }
+  .bom-item .ico { width: 22px; height: 22px; }
+}
+
+@media (max-height: 540px) and (orientation: landscape) {
+  .sheet { max-height: 92vh; }
+  .sheet-body { margin-top: var(--s4); }
+  .sheet-act { margin-top: var(--s4); }
+  .dock { gap: var(--s2); bottom: calc(var(--bar-h, 0px) + var(--s2)); }
+  .bom { width: min(100%, 720px); }
+  .bom-item { padding: var(--s2) var(--s1); }
+  .bom-item .ico { width: 20px; height: 20px; }
+  .spec .sp { padding: 5px 0; }
+  .check { padding: var(--s2); }
+  .finale { font-size: var(--fs-head); }
+}

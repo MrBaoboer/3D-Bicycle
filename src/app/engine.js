@@ -81,8 +81,10 @@ export class Engine {
       ctx.hud.setStep(i, this.steps.length, s.title);
       if (s.task) ctx.hud.setTask(s.task.label, () => s.task.onClick(ctx, this));
       if (s.cam) {
+        // dist 不给默认值：声明了 fit 的步骤由 fit 定距（见 stage.setRecommended），
+        // 塞一个默认值会把每一处近景都钉在整车距离上
         ctx.stage.setRecommended({
-          az: s.cam.az ?? 45, el: s.cam.el ?? 16, dist: s.cam.dist ?? 2.6,
+          az: s.cam.az ?? 45, el: s.cam.el ?? 16, dist: s.cam.dist,
           target: s.cam.target ? new THREE.Vector3(...s.cam.target) : undefined,
           ease: s.cam.ease ?? 1,
           fit: s.cam.fit,

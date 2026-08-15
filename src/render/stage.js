@@ -188,11 +188,18 @@ export class Stage {
    *   随便哪行提示换个字数，镜头就自己溜回去。
    */
   setRecommended(o = {}, { keepUser = false } = {}) {
-    const { az = 45, el = 18, dist = 3, target = new THREE.Vector3(), ease = 1.0, fit } = o;
+    const { az = 45, el = 18, dist, target = new THREE.Vector3(), ease = 1.0, fit } = o;
     this._lastFrame = { ...o, target };
     const t = target.clone();
 
-    const d = fit ? Math.max(dist, this.fitDistance(fit) * 1.06) : dist;
+    /*
+     * dist 是「宽画幅下的取景意图」，fit 是「必须完整看到多大一块」。
+     * 声明了 dist 就以它为下限，fit 只把相机再往后推 —— 宽屏上的取景意图原样保留。
+     * **没声明 dist 时由 fit 独自定距**：否则近景步骤会被一个默认值钉在整车距离上，
+     * 而 fit 从不拉近，把立特写就永远是一张整车照。
+     */
+    const fitD = fit ? this.fitDistance(fit) * 1.06 : undefined;
+    const d = fitD !== undefined ? Math.max(dist ?? 0, fitD) : (dist ?? 3);
 
     // 底部那条压掉一截画面 —— 把主体整体抬起来
     t.y -= 2 * d * Math.tan((this.camera.fov * Math.PI) / 360) * this.#viewport().lift;
