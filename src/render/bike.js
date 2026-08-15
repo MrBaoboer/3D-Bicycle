@@ -22,6 +22,21 @@ const MODEL_URL = `${import.meta.env.BASE_URL}models/CarbonFrameBike.glb`;
  */
 const DROP = ['Shadows'];
 
+/**
+ * 上游模型的静止姿态里，整个前端绕转向轴向左打了 40.212°。
+ * 那是给渲染出图摆的姿势，装配说明书要把它扶正 —— 否则前轮不在中垂面上，
+ * 前轴也不是横向（实测 [-0.585, 0.274, -0.764]），装前轮那一步的方向会整个歪掉。
+ *
+ * 转向轴取把立节点的局部 +Z（离铅垂 25.01°，即头管角 65°）。
+ * 扶正后两条判据同时成立：前轮心 Z 由 31.94 mm 归到 -0.7 mm；
+ * 前轴由上面那个斜向量变成 [0.0004, 0.0009, -1]，正横向。
+ */
+const STEER = {
+  node: 'Lenker',                          // 转向总成的根：Lenker → Federung → RadVorn
+  axisFrom: 'Vorbau_Hope_FR_35mm',         // 转向轴 = 把立节点的局部 +Z
+  angleDeg: -40.212,
+};
+
 export class Bike {
   constructor(scene) {
     this.scene = scene;
@@ -61,6 +76,8 @@ export class Bike {
       }
     });
 
+    this.#unsteer();
+
     // 车轮着地：把包围盒底面压到 y = 0，之后所有取景与行程都以地面为基准
     const box = new THREE.Box3().setFromObject(this.root);
     this.root.position.y -= box.min.y;
@@ -81,9 +98,49 @@ export class Bike {
     return this;
   }
 
+  /**
+   * 把前端绕转向轴扶正，见 STEER 的注释。
+   * 旋转要在**父空间**里绕一个过支点的轴做：先把支点与轴变换进父空间，
+   * 平移分量绕支点转，再把旋转左乘到自身四元数上。
+   * 直接写 node.rotation 只会绕节点自己的原点转，前轮会甩出去。
+   */
+  #unsteer() {
+    const node = this.byName.get(STEER.node);
+    const ref = this.byName.get(STEER.axisFrom);
+    if (!node || !ref) return;
+    this.root.updateMatrixWorld(true);
+
+    const m = ref.matrixWorld.elements;
+    const axisW = new THREE.Vector3(m[8], m[9], m[10]).normalize();   // 把立局部 +Z
+    const pivotW = ref.getWorldPosition(new THREE.Vector3());
+
+    const inv = node.parent.matrixWorld.clone().invert();
+    const pivot = pivotW.clone().applyMatrix4(inv);
+    const axis = axisW.clone().transformDirection(inv).normalize();
+    const q = new THREE.Quaternion().setFromAxisAngle(axis, THREE.MathUtils.degToRad(STEER.angleDeg));
+
+    node.position.sub(pivot).applyQuaternion(q).add(pivot);
+    node.quaternion.premultiply(q);
+    node.updateMatrixWorld(true);
+    this.steered = true;
+  }
+
+  /**
+   * 清单里存的是**原始 GLB 节点名**（含空格，如 "Lenker 1"），
+   * 而 GLTFLoader 加载时会过一道 PropertyBinding.sanitizeNodeName：
+   * 空白转下划线、`[ ] . : /` 直接删掉。于是运行时叫 "Lenker_1"。
+   *
+   * 两边必须各自保持原样：清单存原始名，才能被 tools/check-manifest.mjs
+   * 拿 GLB 离线逐条对账；运行时查表前现做同样的净化。
+   * 图省事把清单改成净化名的话，校验器就再也发现不了「模型改名」这类走散。
+   */
+  static sanitize(name) {
+    return String(name).replace(/\s/g, '_').replace(/[[\]./:]/g, '');
+  }
+
   /** 按名字取节点；取不到就抛 —— 名字写错要当场炸，不要静默返回 undefined */
   get(name) {
-    const o = this.byName.get(name);
+    const o = this.byName.get(name) ?? this.byName.get(Bike.sanitize(name));
     if (!o) throw new Error(`[bike] 模型里没有名为 "${name}" 的节点`);
     return o;
   }
@@ -95,7 +152,7 @@ export class Bike {
     return out;
   }
 
-  has(name) { return this.byName.has(name); }
+  has(name) { return this.byName.has(name) || this.byName.has(Bike.sanitize(name)); }
 
   /** 某个子树的世界包围盒 —— 取景与吸附判定都要用 */
   boundsOf(name) {

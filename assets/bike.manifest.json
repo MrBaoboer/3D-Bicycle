@@ -1,0 +1,193 @@
+{
+  "schema": 1,
+  "model": "public/models/CarbonFrameBike.glb",
+  "frame": {
+    "note": "全部坐标是 render/bike.js 加载完成后的世界坐标：已扶正前把 -40.212°、已把整车底面压到 y=0。长度单位 = 模型单位 = 1 米。",
+    "up": [0, 1, 0],
+    "forward": [-1, 0, 0],
+    "left": [0, 0, 1],
+    "mmPerUnit": 1000
+  },
+  "parts": [
+    {
+      "id": "front-wheel",
+      "name": "前轮",
+      "nodes": ["RadVorn"],
+      "install": {
+        "kind": "slide",
+        "dir": [0, 1, 0],
+        "gap": 0.19,
+        "snap": 0.006
+      },
+      "fasten": ["axle-front"],
+      "needs": []
+    },
+    {
+      "id": "handlebar",
+      "name": "车把",
+      "nodes": ["Lenker 1", "Lenkergriff", "Lenkergriff 1", "Bremsgriff", "Bremsgriff 1"],
+      "install": {
+        "kind": "slide",
+        "dir": [0.9062, -0.4228, 0],
+        "gap": 0.16,
+        "snap": 0.005
+      },
+      "fasten": ["stem-face-a", "stem-face-b", "stem-face-c", "stem-face-d"],
+      "needs": []
+    },
+    {
+      "id": "seatpost",
+      "name": "座管与座垫",
+      "nodes": ["Sattelstange"],
+      "install": {
+        "kind": "slide",
+        "dir": [-0.5142, -0.8577, 0],
+        "gap": 0.22,
+        "snap": 0.005
+      },
+      "fasten": [],
+      "needs": []
+    },
+    {
+      "id": "pedal-left",
+      "name": "左脚踏",
+      "nodes": ["Pedal_Funn_Bigfoot_le"],
+      "install": {
+        "kind": "thread",
+        "dir": [0, 0, -1],
+        "gap": 0.12,
+        "snap": 0.004
+      },
+      "pivot": {
+        "point": [0.0463, 0.3083, 0.091],
+        "axis": [0, 0, 1]
+      },
+      "fasten": ["pedal-left-spindle"],
+      "needs": []
+    },
+    {
+      "id": "pedal-right",
+      "name": "右脚踏",
+      "nodes": ["Pedal_Funn_Bigfoot_re"],
+      "install": {
+        "kind": "thread",
+        "dir": [0, 0, 1],
+        "gap": 0.12,
+        "snap": 0.004
+      },
+      "pivot": {
+        "point": [0.3217, 0.4902, -0.091],
+        "axis": [0, 0, 1]
+      },
+      "fasten": ["pedal-right-spindle"],
+      "needs": []
+    }
+  ],
+  "fasteners": [
+    {
+      "id": "axle-front",
+      "name": "前轮桶轴",
+      "tool": "hex-6",
+      "thread": "right",
+      "spec": "M14x1.5",
+      "pitch": 1.5,
+      "turns": 6,
+      "torque": [10, 15],
+      "strip": 25,
+      "axis": [0, 0, -1],
+      "point": [-0.5661, 0.4268, 0.055],
+      "group": "axle-front",
+      "order": "any"
+    },
+    {
+      "id": "pedal-left-spindle",
+      "name": "左脚踏轴（反牙）",
+      "tool": "wrench-15",
+      "thread": "left",
+      "spec": "M14x1.25",
+      "pitch": 1.25,
+      "turns": 8,
+      "torque": [35, 40],
+      "strip": 55,
+      "axis": [0, 0, -1],
+      "point": [0.0463, 0.3083, 0.091],
+      "group": "pedal",
+      "order": "any"
+    },
+    {
+      "id": "pedal-right-spindle",
+      "name": "右脚踏轴",
+      "tool": "wrench-15",
+      "thread": "right",
+      "spec": "M14x1.25",
+      "pitch": 1.25,
+      "turns": 8,
+      "torque": [35, 40],
+      "strip": 55,
+      "axis": [0, 0, 1],
+      "point": [0.3217, 0.4902, -0.091],
+      "group": "pedal",
+      "order": "any"
+    },
+    {
+      "id": "stem-face-a",
+      "name": "面盖螺丝 · 上左",
+      "tool": "hex-4",
+      "thread": "right",
+      "spec": "M5x0.8",
+      "pitch": 0.8,
+      "turns": 6,
+      "torque": [5, 6],
+      "strip": 10,
+      "axis": [0.9062, -0.4228, 0],
+      "point": [-0.2457, 1.077, 0.018],
+      "group": "stem-face",
+      "order": "cross"
+    },
+    {
+      "id": "stem-face-b",
+      "name": "面盖螺丝 · 下右",
+      "tool": "hex-4",
+      "thread": "right",
+      "spec": "M5x0.8",
+      "pitch": 0.8,
+      "turns": 6,
+      "torque": [5, 6],
+      "strip": 10,
+      "axis": [0.9062, -0.4228, 0],
+      "point": [-0.2583, 1.0498, -0.018],
+      "group": "stem-face",
+      "order": "cross"
+    },
+    {
+      "id": "stem-face-c",
+      "name": "面盖螺丝 · 上右",
+      "tool": "hex-4",
+      "thread": "right",
+      "spec": "M5x0.8",
+      "pitch": 0.8,
+      "turns": 6,
+      "torque": [5, 6],
+      "strip": 10,
+      "axis": [0.9062, -0.4228, 0],
+      "point": [-0.2457, 1.077, -0.018],
+      "group": "stem-face",
+      "order": "cross"
+    },
+    {
+      "id": "stem-face-d",
+      "name": "面盖螺丝 · 下左",
+      "tool": "hex-4",
+      "thread": "right",
+      "spec": "M5x0.8",
+      "pitch": 0.8,
+      "turns": 6,
+      "torque": [5, 6],
+      "strip": 10,
+      "axis": [0.9062, -0.4228, 0],
+      "point": [-0.2583, 1.0498, 0.018],
+      "group": "stem-face",
+      "order": "cross"
+    }
+  ]
+}
