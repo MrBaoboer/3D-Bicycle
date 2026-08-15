@@ -46,6 +46,8 @@ export class Bike {
     this.root = null;
     this.clip = null;
     this.mixer = null;
+    /** @type {Map<THREE.Material, {hex:number, i:number}>} 高亮前的自发光原值 */
+    this._glow = new Map();
   }
 
   async load(onProgress) {
@@ -157,6 +159,45 @@ export class Bike {
   /** 某个子树的世界包围盒 —— 取景与吸附判定都要用 */
   boundsOf(name) {
     return new THREE.Box3().setFromObject(this.get(name));
+  }
+
+  /**
+   * 待装件的呼吸高亮。走 emissive 而不是换材质：
+   * 换材质会丢掉这台车最值钱的东西 —— 碳纹、阳极氧化的各向异性、胎侧字。
+   * 材质是共用的（同一材质挂在多个网格上），所以要按材质记原值，别按网格记。
+   */
+  highlight(names, color = 0xd8642a, strength = 0.16) {
+    const list = Array.isArray(names) ? names : [names];
+    for (const name of list) {
+      if (!this.has(name)) continue;
+      this.get(name).traverse((o) => {
+        if (!o.isMesh) return;
+        const ms = Array.isArray(o.material) ? o.material : [o.material];
+        for (const m of ms) {
+          if (!m) continue;
+          if (!this._glow.has(m)) {
+            this._glow.set(m, { hex: m.emissive?.getHex() ?? 0x000000, i: m.emissiveIntensity ?? 1 });
+          }
+          if (!m.emissive) continue;
+          if (strength <= 0) {
+            const o0 = this._glow.get(m);
+            m.emissive.setHex(o0.hex);
+            m.emissiveIntensity = o0.i;
+          } else {
+            m.emissive.setHex(color);
+            m.emissiveIntensity = strength;
+          }
+        }
+      });
+    }
+  }
+
+  clearHighlights() {
+    for (const [m, o] of this._glow) {
+      m.emissive?.setHex(o.hex);
+      m.emissiveIntensity = o.i;
+    }
+    this._glow.clear();
   }
 
   setVisible(name, on) { this.get(name).visible = on; }

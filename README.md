@@ -39,7 +39,10 @@ npm run dev
 
 ## 许可
 
-代码见 [LICENSE](LICENSE)。
+**代码许可待定**，尚未选定。
 
 整车模型是第三方素材，**另行署名与授权** —— CC BY-SA 4.0，
 建模 Robert Schweier，实时化与动画 prefrontal cortex。详见 [assets/CREDITS.md](assets/CREDITS.md)。
+
+CC BY-SA 的 ShareAlike 只约束该模型及其改作（重新导出、减面、贴图转码同样以 CC BY-SA 发布），
+不传染到代码 —— 代码与模型是「聚合」而非「改编」。代码选哪个许可是独立决定。

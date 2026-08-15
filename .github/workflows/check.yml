@@ -1,0 +1,52 @@
+name: 检查
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# 两条作业挂在不同时机：工具链每个 PR 都跑（几十秒），
+# 冒烟只在推到 main 之后跑或手动触发（分钟级）——
+# 不让每个 PR 为一次浏览器走查等上几分钟。
+jobs:
+  工具链:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ['22.13', '24']
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      - name: 装依赖
+        # engines 声明支持两头，就得有人替这句话作证。
+        # 跳过 Playwright 内核下载：这条作业不起浏览器。
+        # 不要用 --ignore-scripts，那会连累别的包。
+        run: npm ci
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
+      - run: npm run check:code
+
+  冒烟:
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22.13'
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run build
+      - run: npm run smoke
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: 冒烟截图
+          path: .shots/smoke/
+          retention-days: 7
