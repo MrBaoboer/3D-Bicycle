@@ -1,0 +1,62 @@
+name: 工程数据不对
+description: 扭矩、规格、牙向、装配顺序、术语 —— 哪一条错了
+labels: [数据订正]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **这类 Issue 最欢迎。** 这份清单里每一个数都可能错，
+        而错了的后果是有人照着它把车装坏。
+
+        绝大多数数据在 `assets/bike.manifest.json` 里，
+        少数写在 `src/steps/acts.js` 的说明卡文案中。
+
+  - type: dropdown
+    id: kind
+    attributes:
+      label: 哪一类
+      options:
+        - 扭矩区间或滑丝阈值
+        - 规格（螺距、公称直径、尺寸）
+        - 牙向（正牙 / 反牙）
+        - 装配顺序或前置依赖
+        - 术语、名称、说明卡里的解释
+        - 其他
+    validations:
+      required: true
+
+  - type: input
+    id: where
+    attributes:
+      label: 在哪儿
+      description: 紧固件 / 件的 id，或步骤 id
+      placeholder: pedal-left-spindle，或 H3
+    validations:
+      required: true
+
+  - type: input
+    id: now
+    attributes:
+      label: 现在写的是
+      placeholder: 扭矩 35–40 N·m
+    validations:
+      required: true
+
+  - type: input
+    id: should
+    attributes:
+      label: 应该是
+      placeholder: 扭矩 40–45 N·m
+    validations:
+      required: true
+
+  - type: textarea
+    id: source
+    attributes:
+      label: 出处
+      description: |
+        厂商说明书、官网规格页、行业标准、或者你自己的实测。
+        有链接最好；实测的话说一下怎么测的。
+        **没有出处的订正没法采纳** —— 换一个同样没出处的数字，帮不上任何人。
+    validations:
+      required: true

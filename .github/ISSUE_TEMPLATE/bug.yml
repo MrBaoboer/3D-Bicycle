@@ -1,0 +1,59 @@
+name: 出问题了
+description: 打不开、卡住、画面不对、某一步走不下去
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        先看一眼是不是浏览器不支持：这一页要 WebGL 2
+        （Chrome / Edge 111+、Safari 16.4+、Firefox 113+），且不能关掉硬件加速。
+
+  - type: input
+    id: step
+    attributes:
+      label: 哪一步
+      description: 顶栏左上角那个编号，例如 08／29；或者步骤 id，例如 C2
+      placeholder: 08／29 前叉穿上来
+    validations:
+      required: true
+
+  - type: textarea
+    id: what
+    attributes:
+      label: 发生了什么
+      description: 你做了什么、看到了什么、本来以为会怎样。一两句就够
+    validations:
+      required: true
+
+  - type: textarea
+    id: console
+    attributes:
+      label: 控制台有没有报错
+      description: F12 打开控制台，把红色那几行贴过来。没有就写「没有」
+      render: text
+
+  - type: input
+    id: env
+    attributes:
+      label: 浏览器与系统
+      placeholder: Chrome 131 / Windows 11 / 1920×1080
+    validations:
+      required: true
+
+  - type: dropdown
+    id: where
+    attributes:
+      label: 在哪儿遇到的
+      options:
+        - https://3d-bicycle.vercel.app
+        - https://mrbaoboer.github.io/3d-bicycle/
+        - 本地 npm run dev
+        - 本地 npm run preview
+    validations:
+      required: true
+
+  - type: textarea
+    id: shot
+    attributes:
+      label: 截图
+      description: 画面不对的话，一张图胜过一段描述。直接拖进来即可
