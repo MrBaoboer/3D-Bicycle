@@ -145,8 +145,16 @@ docs/      CONTRACT.md 模块契约 · DEVELOPMENT.md 开发与维护 · shots/ 
 
 | | 地址 | 怎么来的 |
 |---|---|---|
-| 主 | <https://3d-bicycle.vercel.app> | `vercel.json`，推到 `main` 自动发版 |
-| 备 | <https://mrbaoboer.github.io/3d-bicycle/> | `.github/workflows/deploy.yml` → GitHub Pages |
+| 主 | <https://3d-bicycle.vercel.app> | 推到 `main` → Vercel 出一次生产部署。**别名要手工指过去**，见下 |
+| 备 | <https://mrbaoboer.github.io/3d-bicycle/> | `.github/workflows/deploy.yml` → GitHub Pages，全自动 |
+
+`3d-bicycle.vercel.app` 是手工指定的别名，**不跟着生产部署自动走** ——
+项目自带的 `3d-bicycle-tau.vercel.app` 才是始终指向最新那次的。
+发版之后核一眼；对不上就把它指过去：
+
+```bash
+vercel alias set <本次部署地址> 3d-bicycle.vercel.app
+```
 
 本地预览：
 
