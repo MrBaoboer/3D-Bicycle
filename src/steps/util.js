@@ -162,12 +162,25 @@ function meshBoxes(ctx, { skipParts = false } = {}) {
 /** 一个节点子树下每张网格各一个世界包围盒 */
 function nodeBoxes(ctx, name) {
   const root = ctx.bike.get(name);
-  root.updateMatrixWorld(true);
   const out = [];
+  /*
+   * 逐网格一个盒，而且**必须走 setFromObject**。
+   *
+   * 手写 `geometry.boundingBox.applyMatrix4(o.matrixWorld)` 看着等价，实际不是：
+   * 它要求 matrixWorld 已经是新的，而 `Object3D.updateMatrixWorld()` 只往下走，
+   * **不回头更新祖先**。这一段跑在首帧渲染之前，前面的步骤又刚把摇臂、曲柄、
+   * 轮组挪过位，挂在它们底下的件拿到的祖先矩阵是旧的。
+   *
+   * 后果不是差一点点：油管那四段的节点原点离它自己的几何有一米远
+   * （GLB 里几何是带偏移的），矩阵一旧，量出来的盒就退化到原点那一带 ——
+   * 「接上油管」于是把镜头对准了两个轮胎的下沿，油管一根都不在画面里，
+   * 前后两帧一模一样，看着就像这一步什么也没发生。
+   *
+   * setFromObject 内部走的是 updateWorldMatrix(true, …)，祖先一并刷新。
+   */
   root.traverse((o) => {
     if (!o.isMesh || !o.geometry) return;
-    if (!o.geometry.boundingBox) o.geometry.computeBoundingBox();
-    out.push(new Box3().copy(o.geometry.boundingBox).applyMatrix4(o.matrixWorld));
+    out.push(new Box3().setFromObject(o));
   });
   return out.length ? out : [ctx.bike.boundsOf(name)];
 }
@@ -441,27 +454,11 @@ export function installPart(ctx, partId, { onDone, hint, sound } = {}) {
 /** 扭矩行：把区间写清 */
 export const torqueRow = (f) => ['扭矩', `${f.torque[0]}–${f.torque[1]} N·m`];
 
-/** 工具代号 → 人话。内六角合并成一条，见 toolList */
-const TOOL_NAME = {
-  'wrench-15': '15 mm 扳手',
-  torque: '扭力扳手',
-};
-
-/**
- * 这一遍真正会用到的工具，从清单现数。
- * 手写过一版「4 / 5 / 6 mm 内六角」—— 而这台车一处也没用到 5 mm。
- *
- * 内六角按尺寸并成一条（「4 / 6 mm 内六角」）。逐把列出来是
- * 「4 mm 内六角、6 mm 内六角、15 mm 脚踏扳手」十八个字，
- * 挂在旁白上要折两行 —— 而这一步的旁白只该占一行。
+/*
+ * 这里曾经有个 toolList()，把全车用到的扳手汇成一行挂在「拆开看看」的旁白上。
+ * 撤掉了：那一行占着开场唯一一句旁白的位置，而「该拿哪一把」在开场是没用的信息 ——
+ * 真正用得上它的时刻是拧到某一颗的那一下，那时各自的说明卡会说。
  */
-export function toolList(ctx) {
-  const used = [...new Set(ctx.bom.fasteners.map((f) => f.tool))];
-  const hex = used.filter((k) => k.startsWith('hex-'))
-    .map((k) => +k.slice(4)).sort((a, b) => a - b);
-  const rest = used.filter((k) => !k.startsWith('hex-')).map((k) => TOOL_NAME[k] ?? k);
-  return [...(hex.length ? [`${hex.join(' / ')} mm 内六角`] : []), ...rest].join('、');
-}
 
 /**
  * 拧紧一颗的标准铺陈：摆出扭矩表、开会话、把「帮我拧上」挂上。

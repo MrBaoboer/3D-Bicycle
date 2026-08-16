@@ -45,8 +45,9 @@ steps/      步骤内容                        通过 ctx 取用以上全部
 | `bom` | 清单 | `part(id)` · `fastener(id)` · `groupOf(idOrGroup)` · `crossPairs(group)` · `crossMate(group,id)` · `order()` · `parts` · `fasteners` · `counts` |
 | `bolts` | 程序化螺丝与工具 | `spawn(idOrFastener)` · `useTool(kind)` · `hideTools()` · `remove(id)` · `clear()` |
 | `slide` | 一自由度推入 | `begin({partId,onSeat,onAll,wrongHint,sound})` · `park(partId,u)` · `burst(partId,世界位移)` · `cancel()` · `autoSeat(partId?)` |
+| `pick` | 指到哪件问哪件 | `begin({ids,onHover})` · `cancel()`。只问不改，从不夺走轨道控制 |
 | `screw` | 旋入与扭矩 | `begin({fastenerId,onProgress,onTight,onStrip,onWrongWay})` · `beginGroup({group,onProgress,onEach,onAll})` · `cancel()` · `autoRun(id?)` · `autoRunNext()` |
-| `hud` | 界面 | `setCue()` · `setNote()` · `setTask()` · `setAlts()` · `toast()` · `dock()` · `sheet()` · `addSpot()` · `setTorqueGauge()` · `setBoltRow()` · `setChapters()` · `setStep()` · `readyNext()` |
+| `hud` | 界面 | `setCue()` · `setNote()` · `setTask()` · `setAlts()` · `toast()` · `tag()` · `dock()` · `sheet()` · `addSpot()` · `setTorqueGauge()` · `setBoltRow()` · `setChapters()` · `setStep()` · `readyNext()` |
 | `sfx` | 声音 | `play(name,{gain,pitch,delay})` · `setEnabled()`。只有四种：`THREAD_TURN` `TORQUE_CLICK` `SEAT_IN` `WRONG`（另两个别名 `WHEEL_SEAT` `POST_SEAT` 只是 `SEAT_IN` 的轻重档） |
 | `guides` | 三维方向箭头 | `set([{pos,dir,len}])` · `clear()` |
 | `state` | 状态 | 直接读写；只有偏好落盘 |

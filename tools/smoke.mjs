@@ -414,6 +414,64 @@ async function run(viewport, label, port) {
     whole.length === 4 && cut.length === 0,
     cut.length ? cut.map((w) => `${w.id} 贴边`).join('、') : `${whole.length} 张`);
 
+  // ── 摊开那一步：指到哪件，报哪件的名字 ──
+  //
+  // 摊开只回答了「有多少」。指哪儿说哪儿，才回答得了「都是些什么」。
+  // 取样点用每件自己那几块网格的投影中心 —— 不是包围盒中心：
+  // 油管、座管这类件的节点原点离它的几何有一米远，拿盒中心去指会指到空处。
+  const spots = await page.evaluate(async () => {
+    const c = window.__ctx, e = window.__engine, s = c.stage;
+    await e.goToStep('A2');
+    for (let k = 0; k < 300; k++) {
+      if (!s.shot && !e.busy) break;
+      await new Promise((r) => setTimeout(r, 25));
+    }
+    await new Promise((r) => setTimeout(r, 400));
+    const cam = s.camera;
+    cam.updateMatrixWorld(true);
+    const out = [];
+    for (const p of c.bom.parts) {
+      let sx = 0, sy = 0, n = 0;
+      for (const nm of c.bom.nodesOf(p.id)) {
+        c.bike.get(nm).traverse((o) => {
+          if (!o.isMesh || !o.geometry) return;
+          if (!o.geometry.boundingSphere) o.geometry.computeBoundingSphere();
+          const v = o.geometry.boundingSphere.center.clone().applyMatrix4(o.matrixWorld).project(cam);
+          sx += (v.x * 0.5 + 0.5) * innerWidth;
+          sy += (0.5 - v.y * 0.5) * innerHeight;
+          n += 1;
+        });
+      }
+      if (n) out.push({ name: p.name, x: Math.round(sx / n), y: Math.round(sy / n) });
+    }
+    return out;
+  });
+  let named = 0;
+  const wrong = [];
+  for (const sp of spots) {
+    if (sp.x < 2 || sp.x > viewport.width - 2 || sp.y < 2 || sp.y > viewport.height - 2) continue;
+    await page.mouse.move(sp.x, sp.y);
+    await page.waitForTimeout(tmo(60));
+    const got = await page.evaluate(() => {
+      const el = document.querySelector('.tag');
+      return el.hidden ? null : el.textContent;
+    });
+    if (!got) continue;
+    named += 1;
+    // 报出来的必须是清单里真有的名字（指到别的件上也算对：那一像素本来就是那件在前面）
+    const real = await page.evaluate((t) => window.__ctx.bom.parts.some((p) => p.name === t), got);
+    if (!real) wrong.push(`${sp.name}→${got}`);
+  }
+  const cleared = await page.evaluate(async () => {
+    await window.__engine.next();
+    await new Promise((r) => setTimeout(r, 600));
+    return document.querySelector('.tag').hidden;
+  });
+  check(`${label}-认件`, '摊开那一步指到哪件报哪件的名字，翻页就收起',
+    named >= 16 && wrong.length === 0 && cleared,
+    wrong.length ? `报了清单里没有的名字：${wrong.join('、')}`
+      : `${named} / ${spots.length} 处报出名字 · 翻页后${cleared ? '已收起' : '还挂着'}`);
+
   // ── 运镜：不许跳切，而且要绕过去不是穿过去 ──
   //
   // 这一份说明书全靠「同一台车，镜头挪过去」把二十九步串成一件事。
@@ -422,9 +480,11 @@ async function run(viewport, label, port) {
   // 两条判据：
   //   排了一趟   每次换步都得排出一段有时长的运镜（除非两步机位本来就一样），
   //              而不是把相机瞬间摆过去；
-  //   走的是弧   转过六十度以上的那几趟，实际走过的路程必须长于两点间直线 ——
-  //              世界坐标直线插值转半圈时相机是笔直穿过整台车的，
-  //              路程恰好等于直线，这一条抓的就是它。
+  //   走的是弧   全程离主体最近时，不许比两头那个较近的距离还近。
+  //              绕着转过去的话这个比值恒在 1.0 往上（中段还会往外鼓一点）；
+  //              世界坐标直线插值转半圈时相机笔直穿过整台车，它会掉到零附近。
+  //              **判距离而不是判路程**：路程要逐帧累加，帧率一低就把弧量成了直线
+  //              （实测线上跑出过 1.02，紧贴阈值），而距离只要采到中段就一定露馅。
   // 外加：每一趟都要**分毫不差地落在**这一步该在的机位上，否则「最佳姿态」是空话。
   const flight = await page.evaluate(async () => {
     const c = window.__ctx, e = window.__engine, s = c.stage;
@@ -438,19 +498,17 @@ async function run(viewport, label, port) {
      * 看着就像跳切，其实是量晚了。
      */
     const hop = async (i) => {
-      let path = 0;
       let dur = 0;
-      let last = s.camera.position.clone();
       let stop = false;
+      const d0 = s.camera.position.distanceTo(s.controls.target);
+      let minR = d0;
       const tick = () => {
         if (stop) return;
         if (s.shot) dur = Math.max(dur, s.shot.dur);
-        path += last.distanceTo(s.camera.position);
-        last = s.camera.position.clone();
+        minR = Math.min(minR, s.camera.position.distanceTo(s.controls.target));
         requestAnimationFrame(tick);
       };
       requestAnimationFrame(tick);
-      const from = s.camera.position.clone();
       await e.go(i);
       for (let k = 0; k < 300; k++) {
         if (!s.shot && !e.busy) break;
@@ -458,10 +516,12 @@ async function run(viewport, label, port) {
       }
       await new Promise((r) => setTimeout(r, 120));
       stop = true;
-      path += last.distanceTo(s.camera.position);
+      const d1 = s.camera.position.distanceTo(s.controls.target);
       return {
-        id: e.steps[i].id, dur, path,
-        straight: from.distanceTo(s.camera.position),
+        id: e.steps[i].id,
+        dur,
+        // 全程离主体最近时还剩两头那个较近值的几成 —— 绕过去是 1.0 往上，穿过去会掉到零附近
+        clear: minR / Math.max(1e-6, Math.min(d0, d1)),
         land: s.camera.position.distanceTo(s.recommend.pos),
       };
     };
@@ -483,16 +543,17 @@ async function run(viewport, label, port) {
   });
   const jumped = flight.filter((f) => f.dur < 0.4);
   const missed = flight.filter((f) => f.land > 0.01);
-  const chord = flight.filter((f) => f.turn > 60 && f.path <= f.straight * 1.02);
+  const chord = flight.filter((f) => f.turn > 60 && f.clear < 0.9);
   check(`${label}-运镜`, '换步一律走一段运镜，转得多时绕过去，且分毫不差地落在该到的机位上',
     flight.length === (total - 1) * 2 && jumped.length === 0
       && missed.length === 0 && chord.length === 0,
     [
       jumped.length ? `跳切 ${jumped.map((f) => `${f.id}(${f.dur.toFixed(2)}s)`).join('、')}` : '',
       missed.length ? `没落到位 ${missed.map((f) => `${f.id}(${f.land.toFixed(3)}m)`).join('、')}` : '',
-      chord.length ? `走的是弦 ${chord.map((f) => `${f.id}(${Math.round(f.turn)}°)`).join('、')}` : '',
+      chord.length ? `穿过去了 ${chord.map((f) => `${f.id}(离主体剩 ${f.clear.toFixed(2)})`).join('、')}` : '',
     ].filter(Boolean).join(' · ')
-      || `${flight.length} 趟 · 最长 ${Math.max(...flight.map((f) => f.dur)).toFixed(2)}s`);
+      || `${flight.length} 趟 · 最长 ${Math.max(...flight.map((f) => f.dur)).toFixed(2)}s`
+        + ` · 大转弯离主体最近 ${Math.min(...flight.filter((f) => f.turn > 60).map((f) => f.clear)).toFixed(2)}`);
 
   // ── 主题 ──
   const theme = await page.evaluate(async () => {

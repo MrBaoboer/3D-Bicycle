@@ -12,13 +12,20 @@ const MAT = new THREE.MeshBasicMaterial({
   color: 0xd8642a, transparent: true, opacity: 0.85, depthTest: false,
 });
 
-/** 一枚箭头：锥头 + 短杆，轴向 +Y（ConeGeometry 的默认朝向），由外部旋到目标方向 */
+/**
+ * 一枚箭头：锥头 + 杆，轴向 +Y（ConeGeometry 的默认朝向），由外部旋到目标方向。
+ *
+ * 比例是要紧的。上一版锥头直径 0.60·len 而高只有 0.45·len —— 宽过了高，
+ * 配上一根几乎看不见的细杆，从任何角度看都是一枚蘑菇，读不出「朝那边」。
+ * 现在锥头高 0.34、直径 0.26（高比直径 1.3 : 1，是个尖的锥），
+ * 杆占掉全长三分之二 —— 方向是靠这根杆说出来的，锥头只负责说清哪一头是前。
+ */
 function makeArrow(len = 0.05) {
   const g = new THREE.Group();
-  const head = new THREE.Mesh(new THREE.ConeGeometry(len * 0.30, len * 0.45, 14), MAT);
-  head.position.y = len * 0.775;
-  const shaft = new THREE.Mesh(new THREE.CylinderGeometry(len * 0.09, len * 0.09, len * 0.55, 10), MAT);
-  shaft.position.y = len * 0.275;
+  const head = new THREE.Mesh(new THREE.ConeGeometry(len * 0.13, len * 0.34, 24), MAT);
+  head.position.y = len * 0.83;
+  const shaft = new THREE.Mesh(new THREE.CylinderGeometry(len * 0.042, len * 0.042, len * 0.66, 14), MAT);
+  shaft.position.y = len * 0.33;
   g.add(head, shaft);
   // 压在零件之上 —— 箭头指的方向常常正对着要插进去的孔，被挡住就白指了
   g.traverse((o) => { o.renderOrder = 6; });
