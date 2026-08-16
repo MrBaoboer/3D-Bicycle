@@ -161,21 +161,14 @@ async function main() {
   await sleep(160);
 
   /*
-   * 封面让开半边，车摆进另外半边。
+   * 封面就绪：整台车摆满画面，封面化成一层高斯模糊压在它上面。
    *
-   * 摆进哪半边不写死：把封面那块字实际占掉的宽（或窄屏上的高）报给舞台的安全区，
-   * 取景那套机制会自己把车推到剩下那块的正中。宽屏字在左，车就靠右；
-   * 窄屏字在下，车就浮到上面 —— 两档共用同一条路径，版式改了也不用回来改这里。
+   * 车按整幅取景（安全区归零）—— 字是居中压在模糊层上的，两者不必互相让位。
+   * 模糊之后车形只剩一团柔和的明暗，正好当底子；而它是真的那台车，
+   * 不是一张贴上去的图。
    */
   framePoster = () => {
-    const box = cover.querySelector('.cover-in').getBoundingClientRect();
-    // 与 styles.css 里那两条媒体查询同一个判据：窄屏摞起来，
-    // 手机横过来时竖向不够，换回左右分栏
-    const stacked = matchMedia('(max-width: 860px)').matches
-      && !matchMedia('(max-height: 540px) and (orientation: landscape)').matches;
-    stage.setSafeArea(stacked
-      ? { top: 0, bottom: Math.round(innerHeight - box.top) }
-      : { top: 0, bottom: 0, left: Math.round(box.right) });
+    stage.setSafeArea({ top: 0, bottom: 0, left: 0, right: 0 });
     stage.setRecommended({ ...engine.steps[0].cam, target: new THREE.Vector3(...engine.steps[0].cam.target) });
     stage.snapToRecommended();
   };
@@ -186,7 +179,7 @@ async function main() {
   coverAct.hidden = false;
   coverAct.innerHTML = `
     <button class="btn btn-primary" id="cv-go">开始装车</button>
-    <button class="btn btn-text" id="cv-help">先看怎么操作</button>`;
+    <button class="btn btn-text" id="cv-help">怎么操作</button>`;
   coverAct.querySelector('#cv-go').focus();
   // 版式已经换成让开半边的那一档了，量完再摆车
   await frame();

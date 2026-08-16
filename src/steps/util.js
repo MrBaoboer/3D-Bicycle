@@ -25,9 +25,12 @@ const MIN_SPAN = 0.26;
 
 /**
  * 近景往车身那一侧偏多少，以取景半跨度的比例计。
- * 0.35 之内主体仍然稳稳落在画面中段，而原本空着的那半边被车身填上。
+ *
+ * 0.18 ≈ 主体中心离画幅中心不超过画面的 9%，仍在黄金分割那一档之内 ——
+ * 这一步要看的那件东西必须落在舞台中央附近，为了填空把它推到三分之一线外
+ * 就本末倒置了。原来给到 0.35，实测主体最多偏出画面的 17%，看着已经不像「对着它」。
  */
-const CTX_BIAS = 0.35;
+const CTX_BIAS = 0.18;
 
 /**
  * 一件在世界里的形心。三维标注要钉在件身上，而件由一到五个节点组成。
@@ -460,8 +463,16 @@ export function installPart(ctx, partId, { onDone, hint, sound, glow = 0.1 } = {
 
 // ══════════════ 拧紧 ══════════════
 
-/** 扭矩行：把区间写清 */
-export const torqueRow = (f) => ['扭矩', `${f.torque[0]}–${f.torque[1]} N·m`];
+/** 工具行：拧这一颗该拿哪一把 */
+export const toolRow = (f) => ['工具', TOOL_NAME[f.tool] ?? f.tool];
+
+/** 工具代号 → 人话 */
+const TOOL_NAME = {
+  'hex-4': '4 mm 内六角',
+  'hex-5': '5 mm 内六角',
+  'hex-6': '6 mm 内六角',
+  'wrench-15': '15 mm 扳手',
+};
 
 /*
  * 这里曾经有个 toolList()，把全车用到的扳手汇成一行挂在「拆开看看」的旁白上。
@@ -470,43 +481,29 @@ export const torqueRow = (f) => ['扭矩', `${f.torque[0]}–${f.torque[1]} N·m
  */
 
 /**
- * 拧紧一颗的标准铺陈：摆出扭矩表、开会话、把「帮我拧上」挂上。
+ * 拧一颗的标准铺陈：开会话，把「帮我拧上」挂上。
  *
  * 四个拧螺丝的步骤这一段本来一字不差地各写了一遍，于是 `onProgress` 的形参
- * 也各写错了一遍 —— 引擎发的是 `{nm, depth, zone, …}` 一整个对象，四处都当成
- * 一个数直接 `toFixed`。这类活写一次就够。
+ * 也各写错了一遍。这类活写一次就够。
  */
 export function fasten(ctx, fastenerId, hooks = {}) {
   const f = ctx.bom.fastener(fastenerId);
-  const gauge = (nm) => ctx.hud.setTorqueGauge({
-    nm, min: f.torque[0], max: f.torque[1], strip: f.strip,
-  });
-  gauge(0);
   ctx.screw.begin({
     fastenerId,
-    onProgress: (p) => { gauge(p.nm); hooks.onProgress?.(p); },
+    onProgress: hooks.onProgress,
     onTight: hooks.onTight,
-    onStrip: hooks.onStrip,
     onWrongWay: hooks.onWrongWay,
   });
   ctx.hud.setAlts([{ label: '帮我拧上', ico: 'wrench', onClick: () => ctx.screw.autoRun(fastenerId) }]);
   return f;
 }
 
-/** 同上，一组交叉拧紧的（面盖那四颗）。扭矩表跟着手上正在拧的那一颗走 */
+/** 同上，一组交叉拧紧的（面盖那四颗） */
 export function fastenGroup(ctx, group, hooks = {}) {
-  const spec = ctx.bom.groupOf(group)[0];
-  const gauge = (nm) => ctx.hud.setTorqueGauge({
-    nm, min: spec.torque[0], max: spec.torque[1], strip: spec.strip,
-  });
   ctx.screw.beginGroup({
     group,
-    onProgress: (p) => gauge(p.nm),
-    // 还有下一颗才把表归零。最后一颗拧完还归零的话，四个绿勾旁边挂着一块
-    // 「0.0 N·m」，读起来像是白拧了 —— 那个数应该停在最后一颗到的扭矩上
-    onEach: (id, info) => { if (info.remaining) gauge(0); hooks.onEach?.(id, info); },
+    onEach: hooks.onEach,
     onAll: hooks.onAll,
   });
-  gauge(0);
   ctx.hud.setAlts([{ label: '帮我拧上', ico: 'wrench', onClick: () => ctx.screw.autoRun() }]);
 }

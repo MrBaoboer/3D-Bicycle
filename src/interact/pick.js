@@ -49,25 +49,34 @@ export class Pick {
    * @param {string[]} o.ids 参与命中的件 id
    * @param {(hit:{id:string,name:string}|null, x:number, y:number)=>void} o.onHover
    */
-  begin({ ids, onHover }) {
+  begin({ ids, fallback = null, onHover } = {}) {
     /*
      * 网格 → 件 的对照表现建一次。每次移动都从 bom 反查的话，
      * 一次悬停要跑二十七件 × 各自的节点树，指针一动就是一轮全树遍历。
+     *
+     * **求交对着整车，不是只对着这几件。** 车架不在 BOM 里（它是底座，
+     * 不是要装的件），只挂 BOM 件的话，指到车架上什么也不报 ——
+     * 而画面上大半是它。整车都可命中，认不出主的就报 fallback。
      */
     const owner = new Map();
-    const meshes = [];
-    for (const id of ids) {
+    for (const id of ids ?? this.ctx.bom.parts.map((p) => p.id)) {
       const name = this.ctx.bom.part(id).name;
       for (const n of this.ctx.bom.nodesOf(id)) {
-        this.ctx.bike.get(n).traverse((o) => {
-          if (!o.isMesh) return;
-          owner.set(o, { id, name });
-          meshes.push(o);
-        });
+        this.ctx.bike.get(n).traverse((o) => { if (o.isMesh) owner.set(o, { id, name }); });
       }
     }
-    this.session = { owner, meshes, onHover };
+    this.session = { owner, fallback, onHover };
     return this.session;
+  }
+
+  /** 命中的这块网格属于哪一件 —— 顺着祖先往上找，找不到就是底座 */
+  #own(mesh) {
+    const s = this.session;
+    for (let o = mesh; o; o = o.parent) {
+      const hit = s.owner.get(o);
+      if (hit) return hit;
+    }
+    return s.fallback ? { id: '', name: s.fallback } : null;
   }
 
   cancel() {
@@ -93,8 +102,9 @@ export class Pick {
         -((ev.clientY - r.top) / r.height) * 2 + 1,
       );
       this.ray.setFromCamera(this.ptr, this.ctx.stage.camera);
-      const hit = this.ray.intersectObjects(this.session.meshes, false)[0];
-      this.#report(hit ? this.session.owner.get(hit.object) : null, ev.clientX, ev.clientY);
+      const hit = this.ray.intersectObject(this.ctx.bike.root, true)
+        .find((h) => h.object.visible && h.object.isMesh);
+      this.#report(hit ? this.#own(hit.object) : null, ev.clientX, ev.clientY);
     });
   }
 

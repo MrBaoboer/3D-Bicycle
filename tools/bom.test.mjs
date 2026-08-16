@@ -132,7 +132,7 @@ test('needs 指向不存在的件时抛错', () => {
 const cross = (points) => seed({
   fasteners: points.map((point, i) => ({
     id: `b${i}`, name: `b${i}`, group: 'g', order: 'cross',
-    axis: [1, 0, 0], point, torque: [5, 6], strip: 10,
+    axis: [1, 0, 0], point,
   })),
 });
 

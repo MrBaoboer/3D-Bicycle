@@ -265,79 +265,13 @@
   color: var(--text-3);
 }
 
-/* ── 读数：扭矩表与螺丝排 ── */
+/* ── 读数：一排螺丝状态 ── */
 
 .readout {
   display: flex;
   flex-direction: column;
   align-items: flex-end;
   gap: var(--s2);
-}
-
-.gauge {
-  display: grid;
-  grid-template-columns: auto auto;
-  grid-template-rows: auto auto;
-  align-items: center;
-  gap: 0 var(--s3);
-  padding: var(--s2) var(--s4) var(--s2) var(--s3);
-  border-radius: var(--r-md);
-  background: var(--surface);
-  box-shadow: var(--hair), var(--lift-2);
-}
-
-.dial { grid-row: 1 / 3; width: 84px; height: 56px; }
-.dial path { fill: none; stroke-linecap: round; }
-.dial-track { stroke: var(--line); stroke-width: 7; }
-.dial-ok { stroke: var(--go); stroke-width: 7; opacity: 0.5; }
-.dial-hot { stroke: var(--stop); stroke-width: 7; opacity: 0.4; }
-
-/* 值弧靠 stroke-dasharray 走，pathLength=100 把长度归一成百分比 */
-.dial-val {
-  stroke: var(--text-2);
-  stroke-width: 7;
-  stroke-dasharray: 0 100;
-  transition: stroke var(--t-base) var(--ease);
-}
-.dial-hand line { stroke: var(--text); stroke-width: 2.5; stroke-linecap: round; }
-
-.gauge-nm {
-  align-self: end;
-  font-family: var(--mono);
-  font-variant-numeric: tabular-nums;
-  font-size: var(--fs-read);
-  font-weight: 600;
-  line-height: 1.1;
-  color: var(--text);
-  white-space: nowrap;
-}
-.gauge-goal {
-  align-self: start;
-  font-size: var(--fs-mark);
-  letter-spacing: var(--ls-base);
-  color: var(--text-3);
-  white-space: nowrap;
-}
-
-/* 四档：没到 / 到位 / 过了 / 滑丝。颜色之外还各有一处形状差别（弧长、指针位置） */
-.gauge[data-state="ok"] .dial-val { stroke: var(--go); }
-.gauge[data-state="ok"] .gauge-nm { color: var(--go); }
-.gauge[data-state="over"] .dial-val { stroke: var(--warn); }
-.gauge[data-state="over"] .gauge-nm { color: var(--warn); }
-.gauge[data-state="stripped"] .dial-val { stroke: var(--stop); }
-.gauge[data-state="stripped"] .gauge-nm { color: var(--stop); }
-
-/* 到点与滑丝各闪一下 —— 换个颜色不够，眼睛还在车上，得有个动静把它叫过来 */
-.gauge[data-state="ok"] { animation: gauge-hit 0.42s var(--ease); }
-.gauge[data-state="stripped"] { animation: gauge-bad 0.42s var(--ease); }
-@keyframes gauge-hit {
-  0%, 100% { transform: scale(1); }
-  40% { transform: scale(1.05); }
-}
-@keyframes gauge-bad {
-  0%, 100% { transform: translateX(0); }
-  25% { transform: translateX(-4px); }
-  75% { transform: translateX(4px); }
 }
 
 /* ── 一排螺丝状态 ── */
@@ -355,7 +289,7 @@
 
 .bolt { display: flex; flex-direction: column; align-items: center; gap: 3px; min-width: 42px; }
 
-/* 四种状态只靠颜色分，色觉障碍读不出来 —— 到位与滑丝各带一枚图标 */
+/* 三种状态只靠颜色分，色觉障碍读不出来 —— 拧上了那一档另带一枚对勾 */
 .bolt-dot {
   display: grid;
   place-items: center;
@@ -370,7 +304,6 @@
 
 .bolt[data-state="threading"] .bolt-dot { box-shadow: inset 0 0 0 2px var(--accent); }
 .bolt[data-state="tight"] .bolt-dot { background: var(--go); box-shadow: none; }
-.bolt[data-state="stripped"] .bolt-dot { background: var(--stop); box-shadow: none; }
 
 /* ══════════════ 底部旁白与动手按钮 ══════════════ */
 
@@ -511,7 +444,6 @@
 }
 @media (hover: hover) { .btn-text:hover:not(:disabled) { color: var(--accent); background: var(--shade); box-shadow: none; } }
 .btn-text .ico { width: 15px; height: 15px; }
-
 
 .icon-btn {
   display: inline-grid;
@@ -742,9 +674,6 @@
   /* 竖屏上这一列整个压在画面下方，占掉多少就得从车那边扣多少 —— 能收就收 */
   .bolt-nm { display: none; }          /* 只留点，名字挤不下 */
   .bolts { padding: 6px var(--s3); }
-  .gauge { padding: var(--s1) var(--s3); gap: 0 var(--s2); }
-  .dial { width: 68px; height: 46px; }
-  .gauge-nm { font-size: var(--fs-mid); }
 
   .toast { top: 13%; font-size: var(--fs-tiny); }
   .menu { top: auto; bottom: calc(var(--bar-h, 0px) + var(--s3)); left: var(--pad-left); right: var(--pad-right); }
@@ -777,11 +706,6 @@
 
   .side { top: calc(max(var(--s2), var(--sa-top)) + 62px); width: min(240px, 32vw); }
   .note { padding: var(--s3) var(--s4); }
-  .dial { width: 64px; height: 44px; }
-  .gauge-goal { display: none; }
   .toast { top: 8%; }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .gauge[data-state="ok"], .gauge[data-state="stripped"] { animation: none; }
-}

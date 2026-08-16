@@ -43,7 +43,7 @@ export class Fx {
     return m;
   }
 
-  /** 一小撮火花，用于扭矩到点的那一下 */
+  /** 一小撮火花，用于拧到底的那一下 */
   spark(pos, n = 14) {
     if (this.tier === 'low') n = 6;
     const p = new Float32Array(n * 3);

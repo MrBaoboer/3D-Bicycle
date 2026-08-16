@@ -24,7 +24,7 @@
  *   }
  *
  * 长度一律用**模型单位**（与 GLB 内的坐标同一套，别混进毫米）；
- * 扭矩用 N·m，螺距用 mm，圈数用转数。
+ * 螺距用 mm，圈数用转数。
  *
  * ── BOM 件 parts[] ──
  *   {
@@ -55,8 +55,6 @@
  *     "spec":   "M14x1.25",                // 可选；写了就必须与 pitch 对上
  *     "pitch":  1.25,                      // 螺距 mm
  *     "turns":  8,                         // 拧到位的圈数（动画按这个转）
- *     "torque": [35, 40],                  // 扭矩区间 N·m，[min, max]
- *     "strip":  55,                        // 滑丝阈值 N·m，必须大于 max
  *     "axis":   [1, 0, 0],                 // 拧入轴向，单位向量
  *     "point":  [-0.17, 0.28, 0.07],       // 轴上一点（螺栓头中心）
  *     "group":  "pedal",                   // 同一组一起拧
@@ -288,23 +286,29 @@ export function isRightPedalId(id) {
   return /pedal/i.test(id) && /(^|[-_ ])(right|re|r)([-_ ]|$)/i.test(id);
 }
 
-/** 扭矩三档必须严格递增且下限为正：0 < min < max < 滑丝 */
-export function torqueProblems(fasteners) {
+/** 旋合长度的上下限（mm）—— 见 threadProblems */
+export const ENGAGE_MM = [3, 30];
+
+/**
+ * 旋合长度要在常识范围内：`turns × pitch` 就是这颗螺栓一共旋进去多深。
+ *
+ * turns 与 pitch 各自为正由 M-01 管，这一条管的是**两者的乘积**：
+ * 少于 3 mm 的旋合在现实中夹不住任何东西，多于 30 mm 的在这台车上没有
+ * 那么长的螺纹孔 —— 两头都是「数填错了」的信号，而画面上只会表现为
+ * 螺栓转了一下就停、或者转了半分钟还在转。
+ *
+ * 这里曾经校验扭矩三档（0 < 够紧 < 别过 < 滑丝）。那一套连同读数与滑丝
+ * 一起撤掉了：它讲的是拧紧工艺，而这一份要教的是「这一件怎么接上那一件」，
+ * 却占着一屏最显眼的位置。
+ */
+export function threadProblems(fasteners) {
   const out = [];
   for (const f of fasteners || []) {
-    const t = f?.torque;
-    const strip = f?.strip;
-    if (!Array.isArray(t) || t.length !== 2 || !t.every((x) => Number.isFinite(x))) {
-      out.push(`${f?.id}：torque 期望 [min, max] 两个有限数，实得 ${JSON.stringify(t)}`);
-      continue;
+    const mm = (f?.turns ?? 0) * (f?.pitch ?? 0);
+    if (!Number.isFinite(mm) || mm < ENGAGE_MM[0] || mm > ENGAGE_MM[1]) {
+      out.push(`${f?.id}：旋合长度 turns × pitch 期望 ${ENGAGE_MM[0]}–${ENGAGE_MM[1]} mm，`
+        + `实得 ${Number.isFinite(mm) ? mm.toFixed(2) : JSON.stringify(mm)}`);
     }
-    if (!Number.isFinite(strip)) {
-      out.push(`${f?.id}：strip 期望有限数，实得 ${JSON.stringify(strip)}`);
-      continue;
-    }
-    if (!(t[0] > 0)) out.push(`${f.id}：扭矩下限期望 > 0，实得 ${t[0]}`);
-    if (!(t[0] < t[1])) out.push(`${f.id}：期望 torque[0] < torque[1]，实得 ${t[0]} ≮ ${t[1]}`);
-    if (!(t[1] < strip)) out.push(`${f.id}：期望 torque[1] < strip，实得 ${t[1]} ≮ ${strip}`);
   }
   return out;
 }
@@ -534,11 +538,11 @@ export function runChecks(manifest, nodeNames = new Map()) {
     return `${order.length} 件可排成一条合法装配序：${head}${order.length > 4 ? ' → …' : ''}`;
   });
 
-  // ── M-07 扭矩三档递增 ──
-  check('M-07', '每颗紧固件 torque[0] < torque[1] < strip', () => {
-    raise(torqueProblems(fasteners));
-    const rows = fasteners.map((f) => `${f.id} ${f.torque[0]}–${f.torque[1]}/${f.strip}`);
-    return `${fasteners.length} 颗紧固件的「够紧 / 别过 / 滑丝」三档严格递增`
+  // ── M-07 旋合长度 ──
+  check('M-07', `每颗紧固件的旋合长度 turns × pitch 在 ${ENGAGE_MM[0]}–${ENGAGE_MM[1]} mm 之间`, () => {
+    raise(threadProblems(fasteners));
+    const rows = fasteners.map((f) => `${f.id} ${(f.turns * f.pitch).toFixed(1)} mm`);
+    return `${fasteners.length} 颗紧固件旋进去的深度都在常识范围内`
       + `${rows.length ? `（如 ${rows.slice(0, 3).join('、')}）` : ''}`;
   });
 

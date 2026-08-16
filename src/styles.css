@@ -19,89 +19,60 @@
 /* ══════════════ 封面 ══════════════ */
 
 /*
- * 读模型的那几秒，它是一块挡板：得有人告诉你在等什么、还剩多少。
- * 车一到，它就让开半边 —— 封面图是那台车本身。
+ * 读模型的那几秒，它是一块不透明的挡板：得有人告诉你在等什么、还剩多少。
+ * 车一到，挡板化成一层**高斯模糊** —— 那台车隔着毛玻璃透出来，
+ * 既是封面图，又不跟标题抢。不用另拍一张海报，页面上本来就有真东西。
  *
- * 所以这一层的底不是一块实色，而是一道横向渐隐：字这一侧压得住，
- * 另一侧透出去给车。就绪之前渐隐关着（后面什么也没有，透出去只是一块空灰）。
+ * 字水平居中，只留三样：这是什么、从哪儿开始、不会用怎么办。
+ * 「二十七个大件」「走一遍十来分钟」这类交代工作量的话一概不要 ——
+ * 还没决定要不要开始的人，不关心它有多少步。
  */
 #cover {
   position: fixed;
   inset: 0;
   z-index: 90;
   display: grid;
-  align-items: center;
-  justify-items: start;
+  place-items: center;
   padding: var(--pad-top) var(--pad-right) var(--pad-bottom) var(--pad-left);
   background: var(--bg);
-  transition: opacity 0.9s var(--ease), background 0.9s var(--ease);
+  transition: opacity 0.9s var(--ease), background 0.9s var(--ease),
+              -webkit-backdrop-filter 0.9s var(--ease), backdrop-filter 0.9s var(--ease);
 }
 #cover.gone { opacity: 0; pointer-events: none; }
 
-/* 车到了：左边压住字，右边让出去 */
+/*
+ * 车到了：底色退成一层薄纱，真正压住背景的是模糊本身。
+ * 模糊半径给到 40 px —— 再小车形还认得出来，会跟标题抢；
+ * 再大就成了一块纯色，白挂一台车在后面。
+ */
 #cover[data-ready="1"] {
-  background: linear-gradient(to right,
-    var(--bg) 0%, var(--bg) 30%,
-    color-mix(in srgb, var(--bg) 82%, transparent) 46%,
-    transparent 62%);
+  background: color-mix(in srgb, var(--bg) 62%, transparent);
+  -webkit-backdrop-filter: blur(40px) saturate(1.15);
+  backdrop-filter: blur(40px) saturate(1.15);
 }
 
 .cover-in {
-  width: min(30rem, 100%);
-  /* 读条那几秒画面上只有这一块，居中；车一到就靠到左边去，把右边让给它 */
-  margin-inline: auto;
-  transition: margin var(--t-slow) var(--ease);
-}
-#cover[data-ready="1"] .cover-in { margin-inline: 0; }
-
-.cover-eyebrow {
-  margin: 0 0 var(--s4);
-  font-size: var(--fs-mark);
-  /* 中文不像拉丁字母那样靠字距拉出气质 —— 0.24em 会把这一行拆成一个个孤立的字 */
-  letter-spacing: var(--ls-wide);
-  color: var(--text-3);
+  width: min(34rem, 100%);
+  text-align: center;
 }
 
+/*
+ * 标题。这一屏只有它一行字是大的，所以字重不必再加 ——
+ * 500 配上这个字号已经够稳，600 在中文里会糊成一团黑。
+ */
 .cover-t {
-  margin: 0 0 var(--s4);
-  font-size: var(--fs-hero);
-  font-weight: 600;
-  letter-spacing: var(--ls-base);
-  line-height: 1.2;
+  margin: 0;
+  font-size: clamp(30px, 5.2vw, 52px);
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  line-height: 1.28;
   color: var(--text);
 }
 
-.cover-s {
-  max-width: 24em;
-  font-size: var(--fs-base);
-  line-height: var(--lh-body);
-  color: var(--text-2);
-}
-
-/* 三个数字，交代这一遍要花多少工夫 —— 比一句「交互式体验」有用 */
-.cover-facts {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--s3) var(--s5);
-  margin: var(--s5) 0;
-  padding: var(--s4) 0 0;
-  border-top: 1px solid var(--line-2);
-  list-style: none;
-  font-size: var(--fs-mini);
-  color: var(--text-3);
-}
-.cover-facts li { display: flex; align-items: baseline; gap: 5px; }
-.cover-facts b {
-  font-family: var(--mono);
-  font-weight: 400;
-  font-size: var(--fs-read);
-  line-height: 1;
-  color: var(--accent);
-}
-
 .cover-bar {
-  width: min(15rem, 100%);
-  height: 3px;
+  width: min(11rem, 60%);
+  height: 2px;
+  margin: var(--s7) auto 0;
   border-radius: var(--r-full);
   background: var(--line-2);
   overflow: hidden;
@@ -118,7 +89,8 @@
 .cover-msg {
   margin: var(--s3) 0 0;
   min-height: 1.6em;
-  font-size: var(--fs-tiny);
+  font-size: var(--fs-mini);
+  letter-spacing: var(--ls-base);
   color: var(--text-3);
 }
 .cover-msg.bad { color: var(--stop); }
@@ -126,10 +98,52 @@
 /* 就绪之后这一块换成「开始装车」＋「怎么操作」 */
 #cover-act {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  flex-wrap: wrap;
-  gap: var(--s2) var(--s3);
+  gap: var(--s4);
+  margin-top: var(--s7);
   animation: fade var(--t-slow) var(--ease) both;
+}
+
+/*
+ * 主按钮。封面上只有它一件可按的东西，所以做得比界面里那些沉一点：
+ * 大一圈、字距拉开、外面套一圈极淡的光晕 —— 不是描边，是「它自己在发光」。
+ * 悬停时光晕扩一档、按钮微微抬起；按下去沉回去。
+ */
+#cv-go.btn {
+  min-height: 52px;
+  padding: 0 2.6em;
+  font-size: var(--fs-mid);
+  letter-spacing: 0.14em;
+  box-shadow: 0 0 0 6px var(--accent-faint), var(--lift-2);
+  transition: transform var(--t-base) var(--ease),
+              background var(--t-base) var(--ease),
+              box-shadow var(--t-base) var(--ease);
+}
+@media (hover: hover) {
+  #cv-go.btn:hover:not(:disabled) {
+    transform: translateY(-1px);
+    box-shadow: 0 0 0 10px var(--accent-faint), var(--lift-3);
+  }
+}
+#cv-go.btn:active:not(:disabled) { transform: translateY(0) scale(0.98); }
+
+/* 「怎么操作」是第二选择，做成一句可点的小字，不跟主按钮争 */
+#cv-help.btn {
+  min-height: auto;
+  padding: 2px 0;
+  font-size: var(--fs-tiny);
+  letter-spacing: var(--ls-base);
+  color: var(--text-3);
+  border-radius: 0;
+  box-shadow: inset 0 -1px 0 var(--line);
+}
+@media (hover: hover) {
+  #cv-help.btn:hover:not(:disabled) {
+    color: var(--text);
+    background: none;
+    box-shadow: inset 0 -1px 0 var(--text-3);
+  }
 }
 
 /* 加载失败时这里会多出一段说明，读起来要像正文而不是按钮的附注 */

@@ -145,8 +145,7 @@ export function bolt(kind = 'socket', m = 5, lenMm = 12) {
   );
   g.add(helix);
 
-  g.traverse((o) => { o.castShadow = true; });
-  g.userData.spec = { kind, m, lenMm, hex: spec.hex };
+    g.userData.spec = { kind, m, lenMm, hex: spec.hex };
   return g;
 }
 
@@ -171,8 +170,7 @@ export function hexKey(mm = 5) {
   ball.position.z = -r * 0.2;
   g.add(ball);
 
-  g.traverse((o) => { o.castShadow = true; });
-  return g;
+    return g;
 }
 
 /** 15 mm 薄口脚踏扳手。开口在原点，柄伸向 +X */
@@ -205,50 +203,7 @@ export function pedalWrench() {
   grip.position.set(-120 * MM, 0, 0);
   g.add(grip);
 
-  g.traverse((o) => { o.castShadow = true; });
-  return g;
-}
-
-/** 扭力扳手：方头 + 长柄 + 一枚可读的刻度窗。作用端在原点沿 −Z */
-export function torqueWrench() {
-  const g = new THREE.Group();
-  const drive = new THREE.Mesh(new THREE.BoxGeometry(9 * MM, 9 * MM, 16 * MM), MATS.steel);
-  drive.position.z = -6 * MM;
-  g.add(drive);
-
-  const headBox = new THREE.Mesh(new THREE.CylinderGeometry(14 * MM, 14 * MM, 12 * MM, 20), MATS.dark);
-  headBox.rotation.x = Math.PI / 2;
-  headBox.position.z = 8 * MM;
-  g.add(headBox);
-
-  const bar = new THREE.Mesh(new THREE.CylinderGeometry(7 * MM, 8 * MM, 260 * MM, 14), MATS.steel);
-  bar.rotation.x = Math.PI / 2;
-  bar.position.z = 140 * MM;
-  g.add(bar);
-
-  const grip = new THREE.Mesh(new THREE.CylinderGeometry(11 * MM, 11 * MM, 90 * MM, 16), MATS.grip);
-  grip.rotation.x = Math.PI / 2;
-  grip.position.z = 230 * MM;
-  g.add(grip);
-
-  // 刻度窗：一条浅色底板加一枚可动指针
-  const win = new THREE.Mesh(new THREE.BoxGeometry(40 * MM, 2 * MM, 9 * MM), MATS.alu);
-  win.position.set(0, 9 * MM, 60 * MM);
-  g.add(win);
-  const needle = new THREE.Mesh(new THREE.BoxGeometry(2.5 * MM, 3 * MM, 7 * MM), MATS.grip);
-  needle.position.set(-18 * MM, 10.5 * MM, 60 * MM);
-  g.add(needle);
-  g.userData.needle = needle;
-
-  g.traverse((o) => { o.castShadow = true; });
-  return g;
-}
-
-/** 让扭力扳手的指针随 0..1 走 */
-export function setTorqueDial(wrench, ratio) {
-  const n = wrench?.userData?.needle;
-  if (!n) return;
-  n.position.x = (-18 + 36 * Math.max(0, Math.min(1, ratio))) * MM;
+    return g;
 }
 
 const TOOL_MAKERS = {
@@ -256,7 +211,6 @@ const TOOL_MAKERS = {
   'hex-5': () => hexKey(5),
   'hex-6': () => hexKey(6),
   'wrench-15': () => pedalWrench(),
-  torque: () => torqueWrench(),
 };
 
 const Z = new THREE.Vector3(0, 0, 1);

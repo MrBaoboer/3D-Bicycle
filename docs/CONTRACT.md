@@ -45,8 +45,8 @@ steps/      步骤内容                        通过 ctx 取用以上全部
 | `bom` | 清单 | `part(id)` · `fastener(id)` · `groupOf(idOrGroup)` · `crossPairs(group)` · `crossMate(group,id)` · `order()` · `parts` · `fasteners` · `counts` |
 | `bolts` | 程序化螺丝与工具 | `spawn(idOrFastener)` · `useTool(kind)` · `hideTools()` · `remove(id)` · `clear()` |
 | `slide` | 一自由度推入 | `begin({partId,onSeat,onAll,wrongHint,sound})` · `park(partId,u)` · `burst(partId,世界位移)` · `cancel()` · `autoSeat(partId?)` |
-| `pick` | 指到哪件问哪件 | `begin({ids,onHover})` · `cancel()`。只问不改，从不夺走轨道控制 |
-| `screw` | 旋入与扭矩 | `begin({fastenerId,onProgress,onTight,onStrip,onWrongWay})` · `beginGroup({group,onProgress,onEach,onAll})` · `cancel()` · `autoRun(id?)` · `autoRunNext()` |
+| `pick` | 指到哪件问哪件 | `begin({ids?,fallback?,onHover})` · `cancel()`。只问不改，从不夺走轨道控制。**由引擎统一挂**，步骤只需在不想要时声明 `noPick: true` |
+| `screw` | 旋入 | `begin({fastenerId,onProgress,onTight,onWrongWay})` · `beginGroup({group,onEach,onAll})` · `cancel()` · `autoRun(id?)` · `autoRunNext()` |
 | `hud` | 界面 | `setCue()` · `setNote()` · `setTask()` · `setAlts()` · `toast()` · `tag()` · `dock()` · `sheet()` · `addSpot()` · `setTorqueGauge()` · `setBoltRow()` · `setChapters()` · `setStep()` · `readyNext()` |
 | `sfx` | 声音 | `play(name,{gain,pitch,delay})` · `setEnabled()`。只有四种：`THREAD_TURN` `TORQUE_CLICK` `SEAT_IN` `WRONG`（另两个别名 `WHEEL_SEAT` `POST_SEAT` 只是 `SEAT_IN` 的轻重档） |
 | `guides` | 三维方向箭头 | `set([{pos,dir,len}])` · `clear()` |
@@ -82,7 +82,7 @@ steps/      步骤内容                        通过 ctx 取用以上全部
   title: '四颗面盖螺丝',
   cam: shot(ctx, ['handlebar'], { cam: { az: 170, el: 26 } }),
   cue: '按对角顺序拧，四颗分两轮',            // 一行纯文字，没有图标也没有 HTML
-  note: { title: '为什么必须对角', spec: [['扭矩', '5–6 N·m']], body: '…', foot: '…' },
+  note: { title: '为什么必须对角', spec: [['工具', '4 mm 内六角']], body: '…', foot: '…' },
   task: { label: '取掉了', onClick(c, engine) { … } },   // 需要手动确认时才有
   enter(c, engine) { … },
   exit(c) { … },
@@ -144,7 +144,7 @@ steps/      步骤内容                        通过 ctx 取用以上全部
   实测二十八趟里只有六趟有外扩。
 - 界面自己引起的重新取景（说明卡摊开、读数出现、转屏）走快档 0.32 s、不外扩 ——
   它是纠版式，不是叙事。但**不许把正在走的那一趟掐短**：动手的步骤会在 `enter()` 里
-  摆出扭矩表，安全区当场变一次，不防的话一趟一秒四的环绕会被压成 0.32 秒。
+  摆出那一排螺丝，安全区当场变一次，不防的话一趟一秒四的环绕会被压成 0.32 秒。
 
 **拧螺丝的步骤，机位必须正对螺栓轴、从螺栓头那一侧看。** 两条都是硬要求：
 看不到螺栓头就无从下手；而旋入靠指针绕轴画圈读角度，轴一旦躺进屏幕平面
@@ -189,7 +189,7 @@ steps/      步骤内容                        通过 ctx 取用以上全部
 |---|---|---|
 | 左脚踏反牙 | `pedal-left-spindle`，`thread: "left"` | 允许拧错。往正牙方向拧满两圈才发涩、停住、回退半圈，并说明「左边是反的」 |
 | 面盖对角顺序 | `stem-face` 四颗，`order: "cross"` | 不拦，只把 `orderOk` 交给步骤脚本，并记进 `state.crossOrderOk`，结尾自检要提。判定走 `bom.crossMate()`，冒烟里正反两条都断言 |
-| 扭矩到点 | 全部 | 拧到底后继续转 = 加载，弧表从绿走到黄再到红，到点「咔」一声；过了滑丝 |
+| 拧到底 | 全部 | 绕圈拧，转一圈进一个螺距，转满 `turns` 圈到底，一声「咔」就算拧上了。**没有扭矩读数，也没有滑丝** |
 
 ## 清单里两条不显眼但要紧的约定
 

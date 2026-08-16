@@ -168,13 +168,13 @@ async function run(viewport, label, port) {
         await window.__ctx.screw.autoRun();
         await new Promise((r) => setTimeout(r, 1200));
         const st = window.__ctx.state;
-        return { ok: list.every((id) => typeof st.fastened[id] === 'number'), got: st.fastened };
+        return { ok: list.every((id) => st.fastened[id] === true), got: st.fastened };
       } catch (e) { return { ok: false, err: String(e) }; }
     }, [ids]);
   };
   for (const [step, ids, name] of [
-    ['F3', ['axle-front'], '桶轴上扭矩'],
-    ['D2', ['stem-face-a', 'stem-face-b', 'stem-face-c', 'stem-face-d'], '面盖四颗按对角上扭矩'],
+    ['F3', ['axle-front'], '桶轴拧到底'],
+    ['D2', ['stem-face-a', 'stem-face-b', 'stem-face-c', 'stem-face-d'], '面盖四颗按对角拧到底'],
     ['H2', ['pedal-right-spindle'], '右脚踏正牙旋入'],
     ['H3', ['pedal-left-spindle'], '左脚踏反牙旋入'],
   ]) {

@@ -16,14 +16,12 @@ const PREFS = {
   theme: 'light',
   sound: true,
   primed: false,          // 是否看过「怎么操作」
-  torqueUnit: 'nm',       // nm / lbft —— 扭矩单位，北美用户习惯 lb·ft
 };
 
 /** 这一遍的进度，刷新即归零 */
 const RUN = {
   installed: {},          // { 'front-wheel': true, ... }
-  fastened: {},           // { 'pedal-left-spindle': 38.2, ... } 值是拧到的扭矩 N·m
-  stripped: {},           // { id: true } 拧过头滑丝的
+  fastened: {},           // { 'pedal-left-spindle': true, ... } 拧到底了
   wrongThread: 0,         // 左脚踏拧反的次数 —— 结尾自检要提
   crossOrderOk: null,     // 面盖是否按对角顺序拧的
 };
@@ -61,7 +59,7 @@ const PREF_KEYS = new Set(Object.keys(PREFS));
 
 /**
  * 只有偏好落盘。进度本来就「下次打开一律不再读取」，写它没有任何用处。
- * 顺带解决一个实际问题：拧螺丝时扭矩每帧都在变，不合并的话每帧写一次盘。
+ * 顺带解决一个实际问题：拧螺丝时进度每帧都在变，不合并的话每帧写一次盘。
  */
 let queued = false;
 export const state = new Proxy(load(), {
@@ -89,10 +87,4 @@ export function onStateChange(fn) {
 /** 从头再来：这一遍的进度归零，偏好一概不动 */
 export function resetRun() {
   for (const [k, v] of Object.entries(freshRun())) state[k] = v;
-}
-
-/** N·m → 显示字符串，跟随偏好 */
-export function torqueText(nm) {
-  if (state.torqueUnit === 'lbft') return `${(nm * 0.73756).toFixed(1)} lb·ft`;
-  return `${nm.toFixed(1)} N·m`;
 }

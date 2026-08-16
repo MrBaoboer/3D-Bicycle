@@ -1,10 +1,12 @@
 /**
- * 旋入与扭矩
+ * 旋入
  *
- * 两段，以「拧到底」为界：
- *   旋入 —— 绕螺栓轴做圆周拖动，转一圈进一个螺距，转满 turns 圈到底；
- *   扭矩 —— 到底之后继续转就是加载。这一段螺栓几乎不动，扭矩却在陡升：
- *           手指还在走、螺栓不走，「上劲」这件事只能这么说出来。
+ * 绕螺栓轴做圆周拖动，转一圈进一个螺距，转满 turns 圈到底 —— 到底就是拧上了。
+ *
+ * **这里没有扭矩。** 早先到底之后还有一段「加载」：继续转，读数往上爬，
+ * 读数进绿区算到位，过头算拧滑。那一套讲的是拧紧工艺，不是装配 ——
+ * 它把一屏最显眼的位置让给了一个数字，而这一份要教的是「这一件怎么接上那一件」。
+ * 手上转螺丝这件事本身是好玩的，留着；牛米、绿区、滑丝一概去掉。
  *
  * 左脚踏是反牙，这正是本项目要教会的一件事，所以**允许拧错**：
  * 往错方向拧满两圈才停住、发涩、回退半圈，话留给步骤脚本去说。
@@ -20,23 +22,6 @@ import * as THREE from 'three';
 import { tween, Ease, wait } from '../util/tween.js';
 
 const TAU = Math.PI * 2;
-
-/**
- * 拧到底之后再转这么多，扭矩就从零走到滑丝。
- * 真扳手上这一段只有几十度，但手指在屏幕上分辨不了几十度 ——
- * 给到一圈多，绿区才有五十来度的宽度，够人听见「咔」再松手。
- */
-const LOAD_SPAN = 1.25 * TAU;
-
-/** 扭矩曲线的指数：前段轻快、末段陡升，正是拧到底之后手上那种「越来越沉」 */
-const LOAD_CURVE = 2.6;
-
-/**
- * 加载段螺栓真正转过的角度，以及它的曲线（越拧越慢）。
- * 手指走一圈多，螺栓只走这么点 —— 「转不动了」全靠这个比例传达。
- */
-const LOAD_SPIN = 0.3 * TAU;
-const SPIN_CURVE = 0.6;
 
 /** 往错方向拧到这里就停住；停住之后回退半圈 */
 const WRONG_LIMIT = 2 * TAU;
@@ -106,10 +91,9 @@ export class Screw {
    * 拧一颗。
    * @param {object} o
    * @param {string} o.fastenerId
-   * @param {(nm:number, id:string)=>void} [o.onTight]    到扭矩下限，「咔」的那一下
-   * @param {(id:string)=>void} [o.onStrip]               滑丝。只记下，不作惩罚
-   * @param {(id:string)=>void} [o.onWrongWay]            反方向拧满两圈
-   * @param {(p:object)=>void} [o.onProgress] { id, phase, depth, turns, nm, zone } —— 喂扭矩表
+   * @param {(id:string)=>void} [o.onTight]     拧到底，「咔」的那一下
+   * @param {(id:string)=>void} [o.onWrongWay]  反方向拧满两圈
+   * @param {(p:object)=>void} [o.onProgress] { id, depth, turns } —— 喂进度用
    */
   begin(o) { return this._open([o.fastenerId], o); }
 
@@ -117,7 +101,7 @@ export class Screw {
    * 拧一组（面盖那四颗）。四颗同时可拧，拧哪一颗由用户按下去决定。
    * @param {object} o
    * @param {string} o.group
-   * @param {(id:string, info:{orderOk:boolean, nm:number, stripped:boolean})=>void} [o.onEach]
+   * @param {(id:string, info:{orderOk:boolean})=>void} [o.onEach]
    * @param {()=>void} [o.onAll]
    *   order 为 cross 时校验对角顺序：**不拦**，只把 orderOk 交给步骤脚本，
    *   并把 ctx.state.crossOrderOk 记成 false。
@@ -139,7 +123,7 @@ export class Screw {
   }
 
   /**
-   * 降级路径：自动拧到扭矩区间中点。跳过的只是手感，该看到、该听到的一样不少。
+   * 降级路径：自动拧到底。跳过的只是手感，该看到、该听到的一样不少。
    *
    * 不给 id 就把这一组剩下的挨个拧完，且**每拧一颗重问一次该轮到谁**。
    * 不能一次性排好队：用户可能已经手拧了一颗，此刻该走的是它的对角，
@@ -162,17 +146,13 @@ export class Screw {
     }
   }
 
-  /** 自动拧完一颗：旋到底，再加载到扭矩区间中点 */
+  /** 自动拧完一颗：旋到底就是拧上了 */
   async _runOne(id) {
     const s = this.session;
     this._use(id);
     const b = s.rigs.get(id);
-    const mid = (b.f.torque[0] + b.f.torque[1]) / 2;
-    const top = b.feedAngle + LOAD_SPAN * Math.pow(mid / b.f.strip, 1 / LOAD_CURVE);
     const from = b.progress;
-    await tween(0.9, (k) => this._turn(from + (b.feedAngle - from) * k), { ease: Ease.inOutQuad });
-    if (this.session !== s) return;
-    await tween(0.5, (k) => this._turn(b.feedAngle + (top - b.feedAngle) * k), { ease: Ease.outQuad });
+    await tween(1.1, (k) => this._turn(from + (b.feedAngle - from) * k), { ease: Ease.inOutQuad });
     if (this.session !== s) return;
     this._finish(id);
     await wait(0.25);
@@ -245,7 +225,7 @@ export class Screw {
       toolRest: new THREE.Quaternion().setFromUnitVectors(
         new THREE.Vector3(0, 0, 1), axis.clone().negate(),
       ),
-      progress: 0, nm: 0, seated: false, tight: false, stripped: false,
+      progress: 0, tight: false,
     };
     this.session.rigs.set(id, b);
     this.session.pending.add(id);
@@ -265,15 +245,9 @@ export class Screw {
 
   // ══ 一颗的状态 → 画面 ═══════════════════════════════════════════════
 
-  /** 加载量 0..1，1 就是滑丝 */
-  _load(b) { return clamp01((b.progress - b.feedAngle) / LOAD_SPAN); }
-
   _place(b) {
     const seat = Math.max(0, Math.min(b.progress, b.feedAngle));
-    const spin = b.progress <= b.feedAngle
-      ? b.progress
-      : b.feedAngle + LOAD_SPIN * Math.pow(this._load(b), SPIN_CURVE);
-    const rot = new THREE.Quaternion().setFromAxisAngle(b.axis, b.sense * spin);
+    const rot = new THREE.Quaternion().setFromAxisAngle(b.axis, b.sense * seat);
     b.obj.quaternion.copy(b.rest).premultiply(rot);
     b.obj.position.copy(b.head).addScaledVector(b.axis, (seat / b.feedAngle - 1) * b.feed);
     if (this.tool && this.bolt === b) {
@@ -283,21 +257,13 @@ export class Screw {
   }
 
   _report(b) {
-    const f = b.f;
-    const depth = Math.max(0, Math.min(b.progress, b.feedAngle)) / b.feedAngle;
-    const zone = b.stripped ? 'strip'
-      : b.nm >= f.torque[1] ? 'over'
-        : b.nm >= f.torque[0] ? 'green'
-          : depth >= 1 ? 'soft' : 'run';
-    this.session?.onProgress?.({
-      id: f.id, phase: depth >= 1 ? 'load' : 'run',
-      depth, turns: b.progress / TAU, nm: b.nm, zone,
-    });
+    const depth = clamp01(b.progress / b.feedAngle);
+    this.session?.onProgress?.({ id: b.f.id, depth, turns: b.progress / TAU });
   }
 
   /**
    * 转到某个角度（正 = 拧紧方向，与牙向无关）。
-   * 声音、扭矩、到点、滑丝、拧反全在这一处发生 —— 手拖与自动播放走的是同一条路，
+   * 声音、到底、拧反全在这一处发生 —— 手拖与自动播放走的是同一条路，
    * 「帮我拧上」于是不会漏掉任何一记该响的声音。
    */
   _turn(next) {
@@ -307,8 +273,7 @@ export class Screw {
     const f = b.f;
     const wrongWay = next <= -WRONG_LIMIT;
     const prev = b.progress;
-    b.progress = Math.max(-WRONG_LIMIT, Math.min(next, b.feedAngle + LOAD_SPAN));
-    b.nm = f.strip * Math.pow(this._load(b), LOAD_CURVE);
+    b.progress = Math.max(-WRONG_LIMIT, Math.min(next, b.feedAngle));
     this._place(b);
 
     // 每半圈过一次牙就响一记；往错方向拧的那一路压低音高，越拧越涩
@@ -318,28 +283,19 @@ export class Screw {
         ? { depth: 1, pitch: -5, gain: 1.2 }
         : { depth, pitch: depth * 3 });
     }
-    if (!b.seated && b.progress >= b.feedAngle) {
-      b.seated = true;
-      this.ctx.sfx.play('SEAT_IN', { gain: 0.3, pitch: 7, slide: 0.03 });
-    }
     this._report(b);
 
-    if (!b.tight && b.nm >= f.torque[0]) {
+    /*
+     * 拧到底 = 拧上了。当场记账，不等松手 —— `_finish` 只在 pointerup 才跑，
+     * 而「拧到底、直接按方向键翻页」这条路上它永远不跑，结尾自检就会说这颗没拧过。
+     */
+    if (!b.tight && b.progress >= b.feedAngle) {
       b.tight = true;
-      this.ctx.sfx.play('TORQUE_CLICK');
+      this.ctx.sfx.play('SEAT_IN', { gain: 0.34, pitch: 7, slide: 0.03 });
+      this.ctx.sfx.play('SNUG_CLICK', { delay: 0.02 });
       this.ctx.fx?.spark?.(b.obj.position.clone());
-      // 到点当场记账，不等松手。_finish 只在 pointerup 才跑，而「拧到点、
-      // 直接按方向键翻页」这条路上它永远不跑 —— 结尾自检就会说这颗没拧过
-      this.ctx.state.fastened = { ...this.ctx.state.fastened, [f.id]: b.nm };
-      s.onTight?.(b.nm, f.id);
-    }
-    if (!b.stripped && b.nm >= f.strip) {
-      b.stripped = true;
-      this.ctx.sfx.play('THREAD_TURN', { depth: 1, pitch: -8, gain: 1.4, dur: 0.6 });
-      this.ctx.sfx.play('WRONG', { delay: 0.1 });
-      s.onStrip?.(f.id);
-      this._finish(f.id);            // 牙没了，这一颗到此为止；怎么说由步骤脚本决定
-      return;
+      this.ctx.state.fastened = { ...this.ctx.state.fastened, [f.id]: true };
+      s.onTight?.(f.id);
     }
     if (wrongWay) this._wrongWay();
   }
@@ -368,7 +324,7 @@ export class Screw {
     this._offerHelp();
   }
 
-  /** 这一颗到此为止（拧到点松手，或者滑丝） */
+  /** 这一颗到此为止 */
   _finish(id) {
     const s = this.session;
     if (!s || !s.pending.has(id)) return;
@@ -379,14 +335,11 @@ export class Screw {
     s.done.push(id);
     if (!orderOk) { s.crossOk = false; this.ctx.state.crossOrderOk = false; }
 
-    // 滑丝的那一颗照样记进 fastened：它确实拧不动了，步骤的完成计数不该卡在这儿
-    this.ctx.state.fastened = { ...this.ctx.state.fastened, [id]: b.nm };
-    if (b.stripped) this.ctx.state.stripped = { ...this.ctx.state.stripped, [id]: true };
+    this.ctx.state.fastened = { ...this.ctx.state.fastened, [id]: true };
     this.ctx.fx?.ring?.(b.obj.position.clone(), b.axis.clone(), { r1: ringR(b.f) });
 
     s.onEach?.(id, {
-      orderOk, nm: b.nm, stripped: b.stripped,
-      index: s.done.length, total: s.total, remaining: s.pending.size,
+      orderOk, index: s.done.length, total: s.total, remaining: s.pending.size,
     });
 
     const next = [...s.pending][0];
@@ -557,11 +510,8 @@ export class Screw {
     this.active = null;
     if (!a || !b || !s) return;
 
-    if (b.tight || b.stripped) { this._finish(b.f.id); return; }
-    if (a.gained < TAU / 4) { s.fails += 1; this._offerHelp(); return; }
-    if (b.progress >= b.feedAngle && !s.hinted) {
-      s.hinted = true;
-      this.ctx.hud.toast('到底了，接着往同一个方向转就上劲');
-    }
+    if (b.tight) { this._finish(b.f.id); return; }
+    // 转了不到四分之一圈就松手，多半是没找到手感 —— 攒够三次把「帮我拧上」摆出来
+    if (a.gained < TAU / 4) { s.fails += 1; this._offerHelp(); }
   }
 }
