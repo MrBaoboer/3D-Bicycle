@@ -31,6 +31,7 @@ import { Arrows } from './ui/guides.js';
 import { SFX, unlockAudio } from './audio/sfx.js';
 import { Slide } from './interact/slide.js';
 import { Screw } from './interact/screw.js';
+import { Pick } from './interact/pick.js';
 import { Engine } from './app/engine.js';
 import { Build } from './app/build.js';
 import { tick as tickTweens } from './util/tween.js';
@@ -113,6 +114,7 @@ async function main() {
   const ctx = { stage, bike, bom: BOM, bolts, hud, sfx: SFX, fx, guides, state, tier };
   ctx.slide = new Slide(ctx);
   ctx.screw = new Screw(ctx);
+  ctx.pick = new Pick(ctx);
   // 「此刻车上该有哪些件」由它按步骤计划现推 —— 从零开始装靠这一层
   ctx.build = new Build(ctx);
 

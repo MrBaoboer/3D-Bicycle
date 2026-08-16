@@ -149,6 +149,7 @@ const SHELL = `
   </div>
 </div>
 
+<div class="tag" role="status" aria-live="polite" hidden></div>
 <div class="toast" role="status" aria-live="polite" hidden></div>
 <p class="sr-only sr-step" role="status" aria-live="polite"></p>
 
@@ -180,7 +181,7 @@ export class HUD {
       topbar: q('.topbar'), chapters: q('.rail'), stepno: q('.stepno'), steptitle: q('.steptitle'),
       cue: q('.cue'), menu: q('.btn-menu'),
       side: q('.side'),
-      note: q('.note'), noteTab: q('.note-tab'), toast: q('.toast'), srStep: q('.sr-step'),
+      note: q('.note'), noteTab: q('.note-tab'), toast: q('.toast'), tag: q('.tag'), srStep: q('.sr-step'),
       readout: q('.readout'), bolts: q('.bolts'), gauge: q('.gauge'),
       dialOk: q('.dial-ok'), dialHot: q('.dial-hot'), dialVal: q('.dial-val'), dialHand: q('.dial-hand'),
       gaugeNm: q('.gauge-nm'), gaugeGoal: q('.gauge-goal'),
@@ -462,6 +463,31 @@ export class HUD {
     e.innerHTML = (tone ? icon(tone === 'go' ? 'check' : 'warn') : '') + `<span>${text}</span>`;
     e.style.animation = 'none'; void e.offsetWidth; e.style.animation = '';
     this._toastTimer = setTimeout(() => { e.hidden = true; }, dur);
+  }
+
+  /**
+   * 跟着指针走的一枚小标签：把光标下那件东西叫什么说出来。
+   * 传 null 收起。
+   *
+   * @param {string|null} text
+   * @param {number} x @param {number} y 视口坐标
+   */
+  tag(text, x = 0, y = 0) {
+    const el = this.el.tag;
+    if (!text) {
+      if (!el.hidden) { el.hidden = true; el.textContent = ''; }
+      return;
+    }
+    // 名字没变就只挪位置。每帧重写 textContent 会让读屏把同一个名字念个不停
+    if (el.textContent !== text) el.textContent = text;
+    el.hidden = false;
+    // 贴在光标右下；快顶到右缘或下缘时翻到另一侧，别被屏幕裁掉
+    const w = el.offsetWidth;
+    const h = el.offsetHeight;
+    const flipX = x + 16 + w > innerWidth - 8;
+    const flipY = y + 14 + h > innerHeight - 8;
+    el.style.left = `${Math.max(8, flipX ? x - 16 - w : x + 16)}px`;
+    el.style.top = `${Math.max(8, flipY ? y - 14 - h : y + 14)}px`;
   }
 
   // ══════════════ 知识卡片 ══════════════

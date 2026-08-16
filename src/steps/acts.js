@@ -15,7 +15,7 @@
 
 import {
   V, shot, frameWhole, frameBolts, burstOffset, burstReset, BURST_VIEW,
-  installPart, partCenter, torqueRow, toolList, fasten, fastenGroup,
+  installPart, partCenter, torqueRow, fasten, fastenGroup,
 } from './util.js';
 import { torqueText } from '../core/state.js';
 import { tween, Ease } from '../util/tween.js';
@@ -121,8 +121,12 @@ export function acts(ctx) {
        * （二十七件、七颗），只有「工具」一行是新的 —— 而它在宽屏上占掉右边
        * 三百三十二像素，正好是这一步唯一要做的事：把二十七件摊开给人看。
        * 一行旁白说得完的事，不值得用四分之一个画幅去说第二遍。
+       *
+       * 工具改在各自那一步的说明卡上讲 —— 拧到哪一颗，就说该拿哪一把，
+       * 那才是用得上它的时刻。
        */
-      cue: `${ctx.bom.counts.parts} 个大件、${ctx.bom.counts.fasteners} 颗要上扭矩的螺丝 · 工具 ${toolList(ctx)}`,
+      cue: `${ctx.bom.counts.parts} 个大件、${ctx.bom.counts.fasteners} 颗要上扭矩的螺丝 · `
+        + `${matchMedia('(pointer: coarse)').matches ? '点一下' : '指向'}任一件，看它叫什么`,
       async enter(c, engine) {
         // 每一件的出场时刻：装得越晚，飞得越早。没人装的（车架这类底座）当第 0 步
         const last = engine.steps.length - 1;
@@ -138,8 +142,18 @@ export function acts(ctx) {
             c.slide.burst(p.id, burstOffset(c, p.id, Ease.outCubic(clamp01(k))));
           }
         }, { ease: Ease.linear });
+
+        /*
+         * 摊开只回答了「有多少」，没回答「都是些什么」。
+         * 二十七个名字全标出来是一屏浮字，什么也读不成 —— 指哪儿说哪儿，
+         * 一次只说一个。等摊开演完再挂上：件还在飞的时候指它没有意义。
+         */
+        c.pick.begin({
+          ids: c.bom.parts.map((p) => p.id),
+          onHover: (hit, x, y) => c.hud.tag(hit?.name ?? null, x, y),
+        });
       },
-      exit(c) { burstReset(c); },
+      exit(c) { c.pick.cancel(); burstReset(c); },
     },
     {
       id: 'A3',

@@ -164,6 +164,8 @@ export class Engine {
       await prev?.exit?.(ctx);
       ctx.slide.cancel();
       ctx.screw.cancel();
+      ctx.pick?.cancel();
+      ctx.hud.tag(null);
       ctx.guides.clear();
       ctx.hud.clearSpots();
       ctx.hud.setNote(null);
