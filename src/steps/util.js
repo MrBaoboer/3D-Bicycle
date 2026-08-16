@@ -23,14 +23,16 @@ const wrapDeg = (d) => ((d % 360) + 540) % 360 - 180;
  */
 const MIN_SPAN = 0.26;
 
-/**
- * 近景往车身那一侧偏多少，以取景半跨度的比例计。
+/*
+ * 这里曾经有个 CTX_BIAS：近景一律往整车形心那边偏一档，好把空着的半边填上。
+ * 撤掉了 —— 它与「这一步要看的那件东西落在舞台中央」是直接冲突的两件事，
+ * 而冲突时后者赢。装件那几步早就不走它了（锚点一钉死就不再偏），
+ * 只剩拧螺丝那两步还在偏：面盖四颗在画面上只占 6% 宽，被它推出去 0.16 个半跨度，
+ * 读起来就是「这一小撮东西没在中间」。
  *
- * 0.18 ≈ 主体中心离画幅中心不超过画面的 9%，仍在黄金分割那一档之内 ——
- * 这一步要看的那件东西必须落在舞台中央附近，为了填空把它推到三分之一线外
- * 就本末倒置了。原来给到 0.35，实测主体最多偏出画面的 17%，看着已经不像「对着它」。
+ * 构图上确实要偏的那几步（车把停在中线略左）改成由步骤自己写 off，
+ * 见 aimAt —— 明写的偏移看得见、改得动，自动补偿看不见、也说不清偏了多少。
  */
-const CTX_BIAS = 0.18;
 
 /**
  * 一件在世界里的形心。三维标注要钉在件身上，而件由一到五个节点组成。
@@ -58,12 +60,14 @@ export function partCenter(ctx, partId) {
  * 逐网格各算各的，量到的就是零件本身。
  *
  * @param {Box3[]} boxes
- * @param {{az:number, el:number, pad?:number, depth?:number, toward?:Vector3}} o
+ * @param {{az:number, el:number, pad?:number, depth?:number, at?:Vector3, off?:number[]}} o
  *   depth：沿视线的半深要补多少（0–1）。近景补满，整车只补三分之一 ——
  *   主体一大，撑开画幅的那几个角并不在最靠近相机的那一层上，全额补会白白退远一米。
- *   toward：画面要往哪一边偏一点，见下。span：整车半径，偏多少按主体与它的比例缩放。
+ *   at：对准哪一点，默认整段包络的中点。
+ *   off：这一步**故意**要让主体偏出正中多少，以取景半跨度计，[右为正, 上为正]。
+ *     不写就是正中 —— 每一步要看的那件东西默认落在舞台中央，偏出去要有人签字。
  */
-function aimAt(boxes, { az, el, pad = 1, depth = 1, toward = null, span = 0, at = null }) {
+function aimAt(boxes, { az, el, pad = 1, depth = 1, at = null, off = null }) {
   const all = new Box3();
   for (const b of boxes) if (!b.isEmpty()) all.union(b);
   /*
@@ -101,32 +105,15 @@ function aimAt(boxes, { az, el, pad = 1, depth = 1, toward = null, span = 0, at 
   let h = Math.max(MIN_SPAN / 2, hu * pad);
 
   /*
-   * 把镜头往车身那一侧偏一点。
-   *
-   * 只对准主体的话，构图常常一半是车、一半是空。上下头碗那一步最典型：
-   * 主体在头管顶端，而这一刻车上的东西全在它的下方与后方 ——
-   * 主体摆正中，左上就是一大片什么也没有的灰，读起来像页面没画完。
-   *
-   * 所以机位目标从主体形心往整车形心挪一步，挪的量夹在取景半跨度的 CTX_BIAS 之内，
-   * 同时把取景放大同样多 —— 主体一寸也没被挤出画面，多出来的那一块全给了车身。
-   * 夹住是必须的：不夹，一个装在车尾的小件会把镜头一路拖到车头去。
-   *
-   * **偏多少要看主体有多小。** 主体本身就横跨大半台车时（两根油管从刹把一路
-   * 走到卡钳），四周本来就没有空地可填，再往车身那边偏只会把整台车推到画幅上半，
-   * 底下空出一大片。所以按「主体半跨度 ÷ 整车半径」缩放：
-   * 占到六成以上就不偏了，两成以下给满。
+   * 明确指定的构图偏移。要的是「主体的中心落在画面 off 那么远的地方」，
+   * 所以先按 r' = r / (1 − |off|) 把取景放大，再把机位目标往反方向推 off·r' ——
+   * 解出来正好，主体也一寸没被挤出画面。直接推 off·r 会连自己都算不准：
+   * 推完取景又大了一圈，占比就不是 off 了。
    */
-  if (toward) {
-    const k = span > 0
-      ? Math.max(0, Math.min(1, (0.6 - Math.max(hr, hu) / span) / 0.4))
-      : 1;
-    const off = toward.clone().sub(c);
-    const lim = CTX_BIAS * k;
-    const dr = Math.max(-r * lim, Math.min(r * lim, off.dot(right)));
-    const du = Math.max(-h * lim, Math.min(h * lim, off.dot(up)));
-    c.addScaledVector(right, dr).addScaledVector(up, du);
-    r += Math.abs(dr);
-    h += Math.abs(du);
+  if (off) {
+    const [ox, oy] = off;
+    if (ox) { r /= 1 - Math.min(0.6, Math.abs(ox)); c.addScaledVector(right, -ox * r); }
+    if (oy) { h /= 1 - Math.min(0.6, Math.abs(oy)); c.addScaledVector(up, -oy * h); }
   }
 
   return {
@@ -167,25 +154,32 @@ function meshBoxes(ctx, { skipParts = false } = {}) {
   return out;
 }
 
-/** 一个节点子树下每张网格各一个世界包围盒 */
+/**
+ * 一个节点子树下每张网格各一个世界包围盒。
+ *
+ * **先把这一枝的矩阵从祖先一路刷到叶子。** 少了这一句，整套取景是错的，
+ * 而且错得很安静 —— 画面上看不出「量错了」，只看得出「构图有点怪」。
+ *
+ * `Box3.setFromObject()` 内部走的是 `updateWorldMatrix(false, false)`：
+ * 只算自己那一格，**既不回头刷祖先，也不往下刷子树**。而清单里登记的二十七个
+ * 节点里有二十六个是组节点（只有油管是网格本身），几何全挂在它们的子网格上。
+ * 于是 `slide.park(id, 0)` 把组节点挪到预备位之后，下面每张网格拿到的还是
+ * 父节点的旧矩阵 —— 量出来的盒**原地不动**。
+ *
+ * 后果是 frameOf 的 ends[0] 与 ends[1] 一模一样：整段行程塌成一个点，
+ * 「量整段行程」与「锚点落在预备位」两条同时失效，镜头对准的是件**装完之后**
+ * 在哪儿。实测二十六步里有八步的主体因此在进场那一刻整整偏出一个 gap
+ * （后避震偏出可用画面半高的 0.55，上下头碗的行程比画幅还高 19%，贴到脸上），
+ * 而 `npm run frames` 量的是整幅画面的非背景像素，正好看不见这一类偏移。
+ *
+ * 另有一条更早的坑同源：油管那四段的节点原点离它自己的几何有一米远，
+ * 祖先矩阵一旧，量出来的盒就退化到原点那一带 —— 「接上油管」于是把镜头
+ * 对准了两个轮胎的下沿，油管一根都不在画面里。
+ */
 function nodeBoxes(ctx, name) {
   const root = ctx.bike.get(name);
+  root.updateWorldMatrix(true, true);
   const out = [];
-  /*
-   * 逐网格一个盒，而且**必须走 setFromObject**。
-   *
-   * 手写 `geometry.boundingBox.applyMatrix4(o.matrixWorld)` 看着等价，实际不是：
-   * 它要求 matrixWorld 已经是新的，而 `Object3D.updateMatrixWorld()` 只往下走，
-   * **不回头更新祖先**。这一段跑在首帧渲染之前，前面的步骤又刚把摇臂、曲柄、
-   * 轮组挪过位，挂在它们底下的件拿到的祖先矩阵是旧的。
-   *
-   * 后果不是差一点点：油管那四段的节点原点离它自己的几何有一米远
-   * （GLB 里几何是带偏移的），矩阵一旧，量出来的盒就退化到原点那一带 ——
-   * 「接上油管」于是把镜头对准了两个轮胎的下沿，油管一根都不在画面里，
-   * 前后两帧一模一样，看着就像这一步什么也没发生。
-   *
-   * setFromObject 内部走的是 updateWorldMatrix(true, …)，祖先一并刷新。
-   */
   root.traverse((o) => {
     if (!o.isMesh || !o.geometry) return;
     out.push(new Box3().setFromObject(o));
@@ -205,9 +199,10 @@ function nodeBoxes(ctx, name) {
  *
  * @param {object} ctx
  * @param {string[]} parts 件 id
- * @param {{pad?:number, extra?:Vector3[]}} [o] extra：还要框进去的世界坐标点
+ * @param {{pad?:number, extra?:Vector3[], off?:number[]}} [o] extra：还要框进去的世界坐标点；
+ *   off：这一步故意让主体偏出正中多少，见 aimAt
  */
-export function frameOf(ctx, parts, { pad = PAD, extra = [], az = 45, el = 16 } = {}) {
+export function frameOf(ctx, parts, { pad = PAD, extra = [], az = 45, el = 16, off = null } = {}) {
   const boxes = [];
   const ends = [new Box3(), new Box3()];
   for (const id of parts) {
@@ -222,37 +217,31 @@ export function frameOf(ctx, parts, { pad = PAD, extra = [], az = 45, el = 16 } 
     ctx.slide.park(id, 1);
   }
   for (const p of extra) boxes.push(new Box3().setFromPoints([p]));
-  const bike = bikeRef(ctx);
 
   /*
-   * **中心偏向预备位，不是整段行程的中点。**
+   * **锚点落在预备位，不是整段行程的中点。**
    *
    * 这一步的取景本来就是按整段行程量的，而件本身常常比行程还小 ——
    * 于是「半个画幅」差不多就等于「半段行程」，件停在行程的哪一头都贴着画幅边。
-   * 实测对准中点时，向下装的那几件（后避震、把立、座管）偏出可用画面半高
-   * 0.75–1.04，也就是压在画幅上沿上：「这一步要看的东西在舞台中央」完全不成立。
+   * 对准中点的话，向下装的那几件（后避震、把立、座管）进场那一刻就压在画幅上沿。
    *
-   * 而**进场那一刻件停在预备位**，那才是用户第一眼看的地方。所以锚点从预备位
-   * 出发、只往装配位挪四分之一：进场时件落在中心附近（实测偏心降到 0.2 上下），
+   * 而**进场那一刻件停在预备位**，那才是用户第一眼看的地方，也正是
+   * 「每一步的初始视角要呈现这一步最好的姿态」说的那一眼。所以锚点从预备位
+   * 出发、只往装配位挪十分之一：进场时件落在正中（实测二十六步偏心全在 0.18 以内），
    * 装到位之后它落在画幅另一侧靠边处 —— 那时这一步已经讲完了。
    *
-   * 半跨度是按新锚点重量的，所以整段行程仍然全在画面里，只是镜头退远一点。
+   * 半跨度是按锚点重量的，所以整段行程仍然全在画面里，代价是镜头退远一点：
+   * 半跨度由 (行程 + 件长)/2 变成 行程 + 件长/2。这一档是认的 ——
+   * 「第一眼看见它在中间」比「画幅再紧一成」值钱。
+   *
+   * ends[0] / ends[1] 这两个盒能不能量准，取决于 nodeBoxes 有没有先刷矩阵。
+   * 少了那一句它俩会一模一样，这一整段就静默失效，见 nodeBoxes 的注释。
    */
   const ANCHOR_TO_SEAT = 0.10;
   const anchor = ends[0].isEmpty() || ends[1].isEmpty() ? null
     : ends[0].getCenter(new Vector3()).lerp(ends[1].getCenter(new Vector3()), ANCHOR_TO_SEAT);
 
-  /*
-   * 锚点定死之后**不再往车身那边偏**。
-   *
-   * 那一档偏置是为了填掉近景里空着的半边（见 aimAt 的 toward），可它与
-   * 「主体落在舞台中央」是直接冲突的两件事：实测它把后避震、把立、座管
-   * 又拽回中线的另一侧去，一步的主体偏出可用画面半高七成以上。
-   * 主体在中间是硬要求，填空是锦上添花 —— 冲突时前者赢。
-   */
-  const { target, fit } = aimAt(boxes, {
-    az, el, pad, at: anchor, toward: anchor ? null : bike.center, span: bike.radius,
-  });
+  const { target, fit } = aimAt(boxes, { az, el, pad, off, at: anchor });
   return { target, fit };
 }
 
@@ -289,15 +278,19 @@ function bikeRef(ctx) {
  * 换个画幅就重新错一次。直接框那几个点，尺度由 MIN_SPAN 兜底，
  * 于是「看清这几颗，同时认得出周围是什么」在任何画幅上都成立。
  *
+ * **不往车身那边偏。** 这里原先挂着那一档自动偏置（往整车形心挪，把空着的半边填上），
+ * 而这几步要看的东西只有指甲盖那么大：面盖那四颗在画面上只占 6% 宽、10% 高，
+ * 被推出去 0.16 个半跨度就等于「这一小撮东西没在中间」，一眼就看得出来。
+ * 小主体的构图靠的是它自己在正中，不是靠周围填得满。
+ *
  * @param {object} ctx
  * @param {string} group 紧固件分组名（单颗的传它自己的 id 也认）
  */
-export function frameBolts(ctx, group, { az, el } = {}) {
+export function frameBolts(ctx, group, { az, el, off = null } = {}) {
   const boxes = ctx.bom.groupOf(group).map(
     (f) => new Box3().setFromCenterAndSize(f.v.point.clone(), new Vector3(0.02, 0.02, 0.02)),
   );
-  const bike = bikeRef(ctx);
-  return aimAt(boxes, { az, el, toward: bike.center, span: bike.radius });
+  return aimAt(boxes, { az, el, off });
 }
 
 /**
