@@ -432,16 +432,17 @@ export function shot(ctx, parts, o = {}) {
  * 一旦在里面等用户动手，engine.busy 就永远不落 —— 翻页、冒烟、自动路径全部卡死。
  * 到位之后要做什么，走 onDone 回调。
  */
-export function installPart(ctx, partId, { onDone, hint, sound } = {}) {
+export function installPart(ctx, partId, { onDone, hint, sound, glow = 0.1 } = {}) {
   const ids = Array.isArray(partId) ? partId : [partId];
   for (const id of ids) {
     ctx.slide.park(id, 0);
-    ctx.bike.highlight(ctx.bom.nodesOf(id), 0xd8642a, 0.1);
+    ctx.bike.highlight(ctx.bom.nodesOf(id), 0xd8642a, glow);
   }
   ctx.slide.begin({
     partId: ids,
     wrongHint: hint,
     sound,
+    glow,
     onAll: () => {
       for (const id of ids) ctx.bike.highlight(ctx.bom.nodesOf(id), 0xd8642a, 0);
       onDone?.();

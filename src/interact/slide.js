@@ -79,8 +79,10 @@ export class Slide {
    * @param {string} [o.wrongHint] 方向错了时说什么
    * @param {string} [o.sound] 坐实时放哪一记，默认 SEAT_IN。
    *   轮子落进勾爪比座管滑进立管沉，两者共用一份配方、只差增益，见 audio/sfx.js 的别名表
+   * @param {number} [o.glow] 待装件的自发光强度，默认 0.1（进了吸附范围三倍）。
+   *   细长的深色件要调高：两根黑油管贴在黑碳纤维车架上，0.1 那一档等于没亮
    */
-  begin({ partId, onSeat, onAll, wrongHint, sound } = {}) {
+  begin({ partId, onSeat, onAll, wrongHint, sound, glow = 0.1 } = {}) {
     this.cancel();
     const ids = Array.isArray(partId) ? [...partId] : [partId];
     const items = new Map();
@@ -95,7 +97,7 @@ export class Slide {
     }
     this.session = {
       items, owner, pending: new Set(ids), total: ids.length, seated: 0,
-      fails: 0, offered: false, onSeat, onAll, wrongHint, sound: sound || 'SEAT_IN',
+      fails: 0, offered: false, onSeat, onAll, wrongHint, sound: sound || 'SEAT_IN', glow,
     };
     for (const rig of items.values()) this.#setU(rig, 0);
     this.#pulse();
@@ -258,11 +260,12 @@ export class Slide {
     const s = this.session;
     if (!s) return;
     this.ctx.bike.clearHighlights?.();
+    const base = s.glow;
     for (const id of s.pending) {
       for (const n of s.items.get(id).nodes) {
         // 自发光只加到「认得出是同一个零件」为止。再高一档，深色主题下
         // 碳纹与阳极氧化会被烧成一片橙，看着像换了个零件而不是同一个被点亮
-        this.ctx.bike.highlight?.(n.obj.name, ACCENT, id === near ? 0.3 : 0.1);
+        this.ctx.bike.highlight?.(n.obj.name, ACCENT, Math.min(1, id === near ? base * 3 : base));
       }
     }
   }
