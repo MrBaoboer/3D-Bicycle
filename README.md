@@ -1,9 +1,13 @@
-# 开箱装车
+# 从零装一台车
 
 **一台全避震山地车，从一根车架装到能骑走的三维分步说明书。**
 二十七个大件、七颗要上扭矩的螺丝，八章二十九步 —— 每一件都亲眼看着装上去。
 
 给想弄明白「一台车到底由什么组成、为什么必须这么装」的人。
+
+**▶ 打开看看：<https://3d-bicycle.vercel.app>**
+
+首屏要读一份 12 MB 的整车模型，第一次打开有十来秒加载条。需要 WebGL 2。
 
 ![装完是这样](docs/shots/01-overview.png)
 
@@ -115,11 +119,16 @@ docs/      CONTRACT.md 模块契约 · DEVELOPMENT.md 开发与维护
 
 ## 部署
 
-产物是纯静态的，`base` 走相对路径，放任何子路径下都不用改配置
-（已在 `/bike-manual/` 下实测过）。
+产物是纯静态的，`base` 走相对路径，放任何子路径下都不用改配置。
 
-仓库带了一条 GitHub Pages 工作流：在 Settings → Pages 里把 Source 选成
-**GitHub Actions**，推到 `main` 就会发版。也可以把 `dist/` 直接丢给任何静态托管。
+**线上两处，同一份产物：**
+
+| | 地址 | 怎么来的 |
+|---|---|---|
+| 主 | <https://3d-bicycle.vercel.app> | `vercel.json`，推到 `main` 自动发版 |
+| 备 | <https://mrbaoboer.github.io/3d-bicycle/> | `.github/workflows/deploy.yml` → GitHub Pages |
+
+本地预览：
 
 ```bash
 npm run build && npm run preview
@@ -127,9 +136,10 @@ npm run build && npm run preview
 
 生产产物会注入一条 CSP（`default-src 'self'`，另放 `blob:`
 给 GLTFLoader 切贴图用）。开发期不注入 —— Vite 靠动态 `<style>` 注样式。
+`vercel.json` 另发一组安全响应头，缓存分两档：带哈希的产物一年，
+文件名固定的模型七天。
 
-**尚未部署到公开地址**，所以这里没有 Demo 链接。上面四张截图是
-`npm run build` 之后从产物里实拍的，不是效果图。
+README 里的截图都是 `npm run build` 之后从产物里实拍的，不是效果图。
 
 ## 已知限制
 
