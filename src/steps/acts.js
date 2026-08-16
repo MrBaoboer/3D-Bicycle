@@ -36,12 +36,12 @@ const BURST_STAGGER = 0.6;
 const clamp01 = (x) => Math.max(0, Math.min(1, x));
 
 /** 推入一件的标准步骤：取景现算、亮起、拖到位 */
-const push = (ctx, { id, phase, title, cue, parts, hint, note, dir, cam, pad, sound }) => ({
+const push = (ctx, { id, phase, title, cue, parts, hint, note, dir, cam, pad, sound, near }) => ({
   id,
   phase,
   title,
   installs: parts,
-  cam: shot(ctx, parts, { dir, cam, pad }),
+  cam: shot(ctx, parts, { dir, cam, pad, near }),
   cue,
   note,
   enter(c, engine) {
@@ -51,7 +51,18 @@ const push = (ctx, { id, phase, title, cue, parts, hint, note, dir, cam, pad, so
 });
 
 export function acts(ctx) {
-  const P = (o) => push(ctx, o);
+  /*
+   * 上一步站在哪个方位。传给 shot()，一步装一对镜像件时挑近的那一侧站 ——
+   * 见 util.js 的 shot()。列表是顺着写下来的，所以这一个游标够用。
+   */
+  let near;
+  const P = (o) => {
+    const s = push(ctx, { ...o, near });
+    near = s.cam.az;
+    return s;
+  };
+  /** 手写机位的那几步也要把游标带上，否则链子断在它们身上 */
+  const at = (cam) => { near = cam.az; return cam; };
 
   return [
     // ══════════════ 开箱 ══════════════
@@ -60,9 +71,16 @@ export function acts(ctx) {
       phase: 0,
       title: '装完是这样',
       showAll: true,
-      // 整车这三张（A1 / H4 / H5）也从几何现量。手写的那一对常量把整车半高
-      // 报小了一成多，于是首屏第一眼的成品照下缘就切掉一截后轮
-      cam: { ...frameWhole(ctx, { az: 38, el: 14 }), snap: true },
+      /*
+       * 整车这几张也从几何现量。手写的那一对常量把整车半高报小了一成多，
+       * 于是首屏第一眼的成品照下缘就切掉一截后轮。
+       *
+       * 开箱这一章三步**共用同一个机位**（`BURST_VIEW`）。这三步说的是同一台车的
+       * 三种状态：装好的、摊开的、只剩车架的 —— 镜头不动，变的只有车，
+       * 「它是由这些东西组成的」这句话才立得住。镜头要是每一步都甩过去七十度，
+       * 看的人先得重新认一遍这是哪儿，那三张图就成了三张不相干的图。
+       */
+      cam: at(frameWhole(ctx, { ...BURST_VIEW })),
       cue: '拖动画面转一圈。点标号看看四处要点',
       enter(c) {
         const marks = [
@@ -92,8 +110,12 @@ export function acts(ctx) {
       phase: 0,
       title: '拆开看看',
       showAll: true,
-      // 机位与位移共用同一组 az/el：位移是在这个机位的屏幕平面里算的，两边必须一致
-      cam: frameWhole(ctx, { burst: true, ...BURST_VIEW }),
+      /*
+       * 机位与位移共用同一组 az/el：位移是在这个机位的屏幕平面里算的，两边必须一致。
+       * ease 给到 0.55（运镜时长按它拉长）—— 这一趟要与两秒六的摊开同步走完，
+       * 摊开的同时镜头绕过去七十来度，那层视差正是「它真的是立体的」这句话。
+       */
+      cam: at({ ...frameWhole(ctx, { burst: true, ...BURST_VIEW }), ease: 0.55 }),
       /*
        * 这一步不挂说明卡。原先那张卡三行里有两行与底下这句旁白一字不差
        * （二十七件、七颗），只有「工具」一行是新的 —— 而它在宽屏上占掉右边
@@ -108,12 +130,6 @@ export function acts(ctx) {
           const at = c.build?.stepOf(p.id) ?? 0;
           return [p.id, (1 - at / last) * BURST_STAGGER];
         }));
-
-        // 镜头同时绕过去一点。位移之外再给一层视差，摊开这件事才有纵深
-        const cam = this.cam;
-        c.stage.setRecommended({ ...cam, az: cam.az - 20, target: V(cam.target) });
-        c.stage.snapToRecommended();
-        c.stage.setRecommended({ ...cam, target: V(cam.target), ease: 0.55 });
 
         // 第二个参数是没过缓动的线性进度 —— 错峰要按真实时间排，不能按缓动后的
         await tween(BURST_TIME, (_, t) => {
@@ -130,8 +146,9 @@ export function acts(ctx) {
       phase: 0,
       title: '从一根车架开始',
       installs: [],
-      // 这一步画面上只剩光车架 —— 取景就量它，别的件此刻都还在箱子里
-      cam: frameWhole(ctx, { bare: true, az: 40, el: 12 }),
+      // 这一步画面上只剩光车架 —— 取景就量它，别的件此刻都还在箱子里。
+      // 机位仍是开箱这一章那一个，见 A1
+      cam: at(frameWhole(ctx, { bare: true, ...BURST_VIEW })),
       cue: '其余全在箱子里。接下来一件件长上去',
     },
 
@@ -220,7 +237,7 @@ export function acts(ctx) {
       phase: 3,
       title: '四颗面盖螺丝',
       fastens: ['stem-face-a', 'stem-face-b', 'stem-face-c', 'stem-face-d'],
-      cam: frameBolts(ctx, 'stem-face', { az: 170, el: 26 }),
+      cam: at(frameBolts(ctx, 'stem-face', { az: 170, el: 26 })),
       cue: '按对角顺序拧，四颗分两轮',
       note: {
         title: '为什么必须对角',
@@ -329,7 +346,7 @@ export function acts(ctx) {
       phase: 5,
       title: '桶轴穿进去',
       fastens: ['axle-front'],
-      cam: frameBolts(ctx, 'axle-front', { az: 105, el: 16 }),
+      cam: at(frameBolts(ctx, 'axle-front', { az: 105, el: 16 })),
       cue: '绕着轴心画圈，把桶轴拧进去',
       note: {
         title: '桶轴不是快拆',
@@ -402,7 +419,7 @@ export function acts(ctx) {
       title: '右脚踏：正牙',
       installs: ['pedal-right'],
       fastens: ['pedal-right-spindle'],
-      cam: shot(ctx, ['pedal-right'], { cam: { az: 235, el: 18 }, pad: 1.45 }),
+      cam: at(shot(ctx, ['pedal-right'], { cam: { az: 235, el: 18 }, pad: 1.45 })),
       cue: '朝车头方向拧 —— 右边是正牙',
       note: {
         title: '两边都是「朝车头拧紧」',
@@ -430,7 +447,10 @@ export function acts(ctx) {
       title: '左脚踏：反牙',
       installs: ['pedal-left'],
       fastens: ['pedal-left-spindle'],
-      cam: shot(ctx, ['pedal-left'], { cam: { az: 55, el: 18 }, pad: 1.45 }),
+      // 与右脚踏那一步对称：各自站在自己那一侧的前四分之三位。
+      // 站到车尾侧（az 55）也看得见脚踏，但这一步要讲的是「朝车头方向拧」，
+      // 车头得在画面里；而且那样与上一步隔着整整 180°，镜头要绕大半台车
+      cam: at(shot(ctx, ['pedal-left'], { cam: { az: 125, el: 18 }, pad: 1.45 })),
       cue: '照样朝车头方向拧 —— 但这边的牙是反的',
       note: {
         title: '为什么偏偏左边是反的',
@@ -460,7 +480,9 @@ export function acts(ctx) {
       phase: 7,
       title: '出门前自检',
       showAll: true,
-      cam: frameWhole(ctx, { az: 38, el: 14 }),
+      // 回到开箱那一个机位。首尾同一个视角，一遍装下来是回到原地看同一台车 ——
+      // 何况上一步刚从左脚踏那边过来，落在这儿只要转十几度
+      cam: at(frameWhole(ctx, { ...BURST_VIEW })),
       cue: '这一遍装到哪儿了，逐条对一下',
       enter(c, engine) { tally(c, engine); },
       exit(c) { c.hud.closeOverlays(); },
@@ -470,7 +492,7 @@ export function acts(ctx) {
       phase: 7,
       title: '可以骑了',
       showAll: true,
-      cam: frameWhole(ctx, { az: 90, el: 6 }),
+      cam: at(frameWhole(ctx, { az: 90, el: 6 })),
       cue: '装完了。骑五十公里回来，把七颗螺丝再过一遍',
     },
   ];

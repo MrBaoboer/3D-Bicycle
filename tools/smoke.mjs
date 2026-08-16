@@ -414,6 +414,86 @@ async function run(viewport, label, port) {
     whole.length === 4 && cut.length === 0,
     cut.length ? cut.map((w) => `${w.id} 贴边`).join('、') : `${whole.length} 张`);
 
+  // ── 运镜：不许跳切，而且要绕过去不是穿过去 ──
+  //
+  // 这一份说明书全靠「同一台车，镜头挪过去」把二十九步串成一件事。
+  // 一步一跳切，看的人每一步都得重新找一遍「这是车上的哪儿」。
+  //
+  // 两条判据：
+  //   排了一趟   每次换步都得排出一段有时长的运镜（除非两步机位本来就一样），
+  //              而不是把相机瞬间摆过去；
+  //   走的是弧   转过六十度以上的那几趟，实际走过的路程必须长于两点间直线 ——
+  //              世界坐标直线插值转半圈时相机是笔直穿过整台车的，
+  //              路程恰好等于直线，这一条抓的就是它。
+  // 外加：每一趟都要**分毫不差地落在**这一步该在的机位上，否则「最佳姿态」是空话。
+  const flight = await page.evaluate(async () => {
+    const c = window.__ctx, e = window.__engine, s = c.stage;
+    const wrap = (d) => ((d % 360) + 540) % 360 - 180;
+    const azOf = (i) => e.steps[i].cam?.az ?? 0;
+
+    /*
+     * 逐帧采样，而不是等 go() 回来再读一次 shot。
+     * go() 会 await 这一步的 enter()，而「拆开看看」的 enter 要演两秒六 ——
+     * 等它回来时那趟运镜早跑完了，shot 已经置空，读出来是「时长 0」，
+     * 看着就像跳切，其实是量晚了。
+     */
+    const hop = async (i) => {
+      let path = 0;
+      let dur = 0;
+      let last = s.camera.position.clone();
+      let stop = false;
+      const tick = () => {
+        if (stop) return;
+        if (s.shot) dur = Math.max(dur, s.shot.dur);
+        path += last.distanceTo(s.camera.position);
+        last = s.camera.position.clone();
+        requestAnimationFrame(tick);
+      };
+      requestAnimationFrame(tick);
+      const from = s.camera.position.clone();
+      await e.go(i);
+      for (let k = 0; k < 300; k++) {
+        if (!s.shot && !e.busy) break;
+        await new Promise((r) => setTimeout(r, 25));
+      }
+      await new Promise((r) => setTimeout(r, 120));
+      stop = true;
+      path += last.distanceTo(s.camera.position);
+      return {
+        id: e.steps[i].id, dur, path,
+        straight: from.distanceTo(s.camera.position),
+        land: s.camera.position.distanceTo(s.recommend.pos),
+      };
+    };
+
+    const out = [];
+    // 正着走一遍，再倒着走一遍 —— 两个方向都要顺
+    for (const dir of ['fwd', 'back']) {
+      const order = dir === 'fwd'
+        ? [...Array(e.steps.length).keys()]
+        : [...Array(e.steps.length).keys()].reverse();
+      await e.goToStep(e.steps[order[0]].id);
+      await new Promise((r) => setTimeout(r, 700));
+      for (let n = 1; n < order.length; n++) {
+        const turn = Math.abs(wrap(azOf(order[n]) - azOf(order[n - 1])));
+        out.push({ dir, turn, ...(await hop(order[n])) });
+      }
+    }
+    return out;
+  });
+  const jumped = flight.filter((f) => f.dur < 0.4);
+  const missed = flight.filter((f) => f.land > 0.01);
+  const chord = flight.filter((f) => f.turn > 60 && f.path <= f.straight * 1.02);
+  check(`${label}-运镜`, '换步一律走一段运镜，转得多时绕过去，且分毫不差地落在该到的机位上',
+    flight.length === (total - 1) * 2 && jumped.length === 0
+      && missed.length === 0 && chord.length === 0,
+    [
+      jumped.length ? `跳切 ${jumped.map((f) => `${f.id}(${f.dur.toFixed(2)}s)`).join('、')}` : '',
+      missed.length ? `没落到位 ${missed.map((f) => `${f.id}(${f.land.toFixed(3)}m)`).join('、')}` : '',
+      chord.length ? `走的是弦 ${chord.map((f) => `${f.id}(${Math.round(f.turn)}°)`).join('、')}` : '',
+    ].filter(Boolean).join(' · ')
+      || `${flight.length} 趟 · 最长 ${Math.max(...flight.map((f) => f.dur)).toFixed(2)}s`);
+
   // ── 主题 ──
   const theme = await page.evaluate(async () => {
     const read = () => ({
