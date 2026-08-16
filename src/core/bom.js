@@ -139,11 +139,17 @@ export class Bom {
   }
 
   /**
-   * 一组交叉拧紧的紧固件按对角两两配对，返回 [[a, b], [c, d]]。
+   * 一组交叉拧紧的紧固件按对角两两配对，返回 **id 对** `[[a, b], [c, d]]`。
    *
    * 判据就是「对角」二字的字面意思：每对连线穿过组的几何中心，
    * 即一颗关于中心的对称点落在配对的那一颗上。四颗面盖螺丝按此配出
    * 上左↔下右、上右↔下左，正是拧面盖时手要交替去的两条对角线。
+   *
+   * **返回的是 id 不是紧固件对象。** 早先返回对象，而唯一的调用方
+   * （`interact/screw.js` 的 `_mate`）拿它跟一个 id 字符串比 —— 恒不相等，
+   * 于是「对角配对」在运行时等于不存在：每一颗第二手都被判成没按对角，
+   * 结尾自检永远多出一行「面盖有一颗没按对角顺序上」，而用户什么也没做错。
+   * 对外只发 id，这一类错就没有地方再犯。
    */
   crossPairs(group) {
     const list = this.#group(group);
@@ -175,9 +181,18 @@ export class Bom {
       if (best > radius * CROSS_TOL) {
         throw new Error(`[bom] 分组 ${group}：${f.id} 找不到对角的那一颗（最近的也差 ${best.toFixed(4)}，组半径 ${radius.toFixed(4)}）`);
       }
-      pairs.push(Object.freeze([f, rest.splice(at, 1)[0]]));
+      pairs.push(Object.freeze([f.id, rest.splice(at, 1)[0].id]));
     }
     return pairs;
+  }
+
+  /** 这一颗的对角是哪一颗；组里没有它就返回 null */
+  crossMate(group, id) {
+    for (const [a, b] of this.crossPairs(group)) {
+      if (a === id) return b;
+      if (b === id) return a;
+    }
+    return null;
   }
 
   #group(name) {

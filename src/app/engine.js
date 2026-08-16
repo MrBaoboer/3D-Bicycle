@@ -21,15 +21,34 @@ export class Engine {
 
     ctx.hud.onNext = () => this.next();
     ctx.hud.onPrev = () => this.back();
-    ctx.hud.onJump = (i) => this.go(i);
+    ctx.hud.onJump = (i) => this.jump(i);
 
+    /*
+     * 键盘翻页。
+     *
+     * 空格与方向键的让位规矩不一样，早先按同一条处理，代价很实在：
+     * 只要焦点落在任何一个按钮上，方向键就整个失灵 —— 而用鼠标点一下「下一步」
+     * 之后焦点正好就在那枚按钮上，此时按方向键毫无反应，像是键盘坏了。
+     *
+     *   空格   是按钮的激活键，焦点在任何控件上都得让开；
+     *   方向键 在按钮上没有默认动作，只让给**自己要用方向键**的那些：
+     *          进度轨（格子之间移焦）、菜单、文本框。它们各自把事件 preventDefault，
+     *          这里认那一下就够，不必回头去认具体是谁。
+     */
     addEventListener('keydown', (e) => {
-      if (!ctx.hud.navVisible || ctx.hud.modalOpen) return;
-      // 焦点落在控件上时不接管：空格是按钮的激活键，不是翻页键
-      if (e.target instanceof Element
-        && e.target.closest('button, a, input, select, textarea, [role="menu"]')) return;
-      if (e.key === 'ArrowRight' || e.key === ' ') { e.preventDefault(); this.next(); }
-      if (e.key === 'ArrowLeft') this.back();
+      if (!ctx.hud.navVisible || ctx.hud.modalOpen || e.defaultPrevented) return;
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      const el = e.target instanceof Element ? e.target : null;
+      if (e.key === ' ') {
+        if (el?.closest('button, a, input, select, textarea, [role="menu"]')) return;
+        e.preventDefault();
+        this.next();
+        return;
+      }
+      if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return;
+      if (ctx.hud.menuOpen || el?.closest('input, select, textarea, [role="menu"]')) return;
+      e.preventDefault();
+      if (e.key === 'ArrowRight') this.next(); else this.back();
     });
   }
 
@@ -48,9 +67,19 @@ export class Engine {
 
   get current() { return this.steps[this.index]; }
 
+  /**
+   * 直接跳到第 i 步（点进度轨、点自检里的一行）。
+   * 意思很明确，所以攒着还没补上的那几下方向键一并作废 ——
+   * 否则点着跳过去，画面还会自己再往前走两步。
+   */
+  jump(i) {
+    this._queued = 0;
+    return this.go(i);
+  }
+
   goToStep(id) {
     const i = this.byId.get(id);
-    if (i !== undefined) return this.go(i);
+    if (i !== undefined) return this.jump(i);
     return undefined;
   }
 
@@ -66,12 +95,28 @@ export class Engine {
    * 「你按一下我演一件」两头都照顾到。
    */
   async next() {
-    if (this.busy) return;
+    // 上一下还没走完就先记着，别当没按 —— 「拆开看看」那一步进场要演一秒多，
+    // 而连按两下方向键是最自然不过的事。丢掉的那一下读起来就是「键盘失灵」
+    if (this.busy) { this.#stash(1); return; }
     if (await this.finishPending()) return;
     if (this.index < this.steps.length - 1) await this.go(this.index + 1);
   }
 
-  async back() { if (this.index > 0) await this.go(this.index - 1); }
+  async back() {
+    if (this.busy) { this.#stash(-1); return; }
+    if (this.index > 0) await this.go(this.index - 1);
+  }
+
+  /** 攒下这一下。封顶四下 —— 按住不放时按键自动重复一秒能来三十下，不封顶会甩出去半本 */
+  #stash(d) { this._queued = Math.max(-4, Math.min(4, (this._queued || 0) + d)); }
+
+  /** 忙的时候攒下的，忙完一下一下补上 */
+  #drain() {
+    const q = this._queued || 0;
+    if (!q) return;
+    this._queued = q > 0 ? q - 1 : q + 1;
+    if (q > 0) this.next(); else this.back();
+  }
 
   /** 这一步还剩什么没做完 */
   get pending() {
@@ -102,6 +147,7 @@ export class Engine {
     }
     // 还剩别的没演完就再亮一次箭头：它此刻的意思是「还有，接着按」
     if (this.pending) this.ctx.hud.readyNext();
+    this.#drain();
     return true;
   }
 
@@ -158,6 +204,7 @@ export class Engine {
     } finally {
       this.busy = false;
     }
+    this.#drain();
   }
 
   /**
@@ -168,6 +215,7 @@ export class Engine {
    * 先把游标挪开，让这一趟一定跑完整的收尾与重铺。
    */
   async restart() {
+    this._queued = 0;
     const at = this.index;
     if (at === 0) {
       await this.current?.exit?.(this.ctx);

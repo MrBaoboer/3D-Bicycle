@@ -30,12 +30,9 @@ const S = {
        + '<path d="M12 3.8v16.4M14.6 5.4 12 8M17.6 7.4 12 13M18.6 10.6 12 17.2M18.4 14.6 14.6 18.4"/>',
   help:  '<circle cx="12" cy="12" r="8.6"/><path d="M9.7 9.6a2.4 2.4 0 1 1 2.3 2.9v1.6"/><circle cx="12" cy="16.4" r=".9"/>',
 
-  // ── 这一件东西 ──
+  // ── 从头再来 ──
   box:  '<path d="M3.4 7.6 12 3.4l8.6 4.2v8.8L12 20.6l-8.6-4.2z"/><path d="M3.4 7.6 12 11.8l8.6-4.2M12 11.8v8.8"/>'
       + '<path d="M7.7 5.5 16.3 9.7"/>',
-  bike: '<circle cx="5.6" cy="16.6" r="4.2"/><circle cx="18.4" cy="16.6" r="4.2"/>'
-      + '<path d="M5.6 16.6h5.2l-2-6.2h4.6l5 6.2"/><path d="M10.8 16.6 13.4 10.4"/>'
-      + '<path d="M8.8 10.4 7.6 8.2M13.4 10.4 15.2 8.4"/>',
 };
 
 /**
@@ -49,12 +46,3 @@ export function icon(name, cls = '') {
   return `<svg class="ico${cls ? ` ${cls}` : ''}" viewBox="0 0 24 24" stroke-width="1.25"
     stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
 }
-
-/** 同上，返回真实节点 */
-export function iconEl(name, cls = '') {
-  const t = document.createElement('template');
-  t.innerHTML = icon(name, cls);
-  return t.content.firstElementChild;
-}
-
-export const ICON_NAMES = Object.keys(S);

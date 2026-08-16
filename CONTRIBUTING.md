@@ -44,8 +44,13 @@ npm run smoke
 **清单是唯一事实来源。** 装配方向、行程、扭矩、依赖顺序都写在
 `assets/bike.manifest.json`，代码里不许再写第二份。改了清单跑 `npm run verify`。
 
-**取景不写常量。** 每一步的机位与取景由 `steps/util.js` 的 `shot()` 从几何现算。
-手写过一版常量，二十来个数里实测有六个是错的。复量走 `.analysis/p-fit.js`。
+**取景不写常量。** 每一步的机位与取景由 `steps/util.js` 从几何现算，
+四个入口见 [docs/CONTRACT.md](docs/CONTRACT.md)。手写过一版常量，
+二十来个数里实测有六个是错的，最后两个到很晚才发现 —— 首屏那张成品照的下缘
+一直切着后轮。复量走 `node .analysis/rvw-frame.mjs`。
+
+**有对错之分的交互，正例反例都要断言。** 面盖对角配对曾经整个失效，
+而当时的冒烟只查了「四颗都记上账」，整整一版没人发现签名交互已经不工作了。
 
 **世界方向不能直接加到 position 上。** 模型里每个件的父级基底都不是单位阵。
 一律走 `ctx.slide.park()`。这一条踩过：前轮曾横着飞出 19 cm。
@@ -71,7 +76,7 @@ PR 正文三段：
 ```
 
 第三段最要紧。「跑了 npm run check」是合格的；
-动了三维或版式的，附一张截图（`node .analysis/shots.mjs <步骤id>` 能直接出图）。
+动了三维或版式的，附一张截图（`npm run build && npm run shots` 从产物里实拍七张）。
 
 ## 关于授权
 

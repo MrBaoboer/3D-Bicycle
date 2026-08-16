@@ -1,14 +1,13 @@
 /**
  * 舞台：渲染器 / 相机 / 光照 / 轨道控制
  *
- * 与榫卯灯笼那套的两处关键差别：
- *  · **Y 轴向上**。glTF 规范就规定 Y-up，模型是按这个导出的，
- *    所以这里不动 THREE.Object3D.DEFAULT_UP —— 改了反而要在加载后补一次旋转。
- *  · 单位是模型单位，不是毫米。真实比例由 calibration 标定后写进 core/scale.js，
- *    取景与行程一律走那个换算，不在这里写死数字。
+ * **Y 轴向上，1 单位 = 1 米。** glTF 规范就规定 Y-up，模型是按这个导出的，
+ * 所以这里不动 `THREE.Object3D.DEFAULT_UP` —— 改了反而要在加载后补一次旋转。
+ * 尺度由 Hope 200 mm 刹车碟标定，见 docs/DEVELOPMENT.md。
  *
- * 取景沿用灯笼验过的做法：每一步声明「必须完整看到多大一块」，
- * 画幅装不下时相机自己后退 —— 少了这一条，手机上主体一定裁边。
+ * 取景不靠手调距离：每一步声明「必须完整看到多大一块」（`fit`），
+ * 画幅装不下时相机自己后退，界面占掉哪几条边也一并算进去。
+ * 少了这一条，手机上主体一定裁边。
  */
 
 import * as THREE from 'three';
@@ -117,8 +116,8 @@ export class Stage {
     controls.zoomSpeed = 0.9;
     this.controls = controls;
 
-    /** 界面遮住的上下边（像素）—— 取景按剩下那块画面算 */
-    this.safe = { top: 0, bottom: 0 };
+    /** 界面遮住的四条边（像素）—— 取景按剩下那块画面算 */
+    this.safe = { top: 0, bottom: 0, left: 0, right: 0 };
 
     this.recommend = { pos: this.camera.position.clone(), target: new THREE.Vector3(), enabled: true };
     this.userTook = false;
@@ -147,30 +146,52 @@ export class Stage {
   }
 
   /**
-   * 界面遮住了多少画面。底部那条常驻栏一变高，取景就得重算 ——
-   * 否则车会坐在字上。
+   * 界面遮住了多少画面。底部那条常驻栏一变高、右边那张说明卡一摊开，
+   * 取景就得重算 —— 否则车会坐在字上，或者半个车被卡片盖住。
    */
-  setSafeArea({ top = 0, bottom = 0 }) {
-    if (this.safe.top === top && this.safe.bottom === bottom) return;
-    this.safe = { top, bottom };
+  setSafeArea({ top = 0, bottom = 0, left = 0, right = 0 }) {
+    const s = this.safe;
+    if (s.top === top && s.bottom === bottom && s.left === left && s.right === right) return;
+    this.safe = { top, bottom, left, right };
     // 动手的时候不重新取景：提示文字每换一行安全区就变，机位会一直缓慢地飘
     if (this.held) return;
     if (this._lastFrame) this.setRecommended(this._lastFrame, { keepUser: true });
   }
 
-  /** 画面中真正可用的那一块：高度占比与中心相对整幅的偏移 */
+  /**
+   * 画面中真正可用的那一块。
+   *
+   * 两件事：可用区占整幅的比例（决定要退多远），以及可用区的中心相对
+   * 整幅中心偏了多少（决定主体要往哪边挪）。四条边各算各的 ——
+   * 右边那张说明卡在宽屏上占掉 300 px，只算上下两条边的话，
+   * 「为什么」卡片会正好压在这一步要看的那个零件上。
+   */
   #viewport() {
+    const w = this.canvas.clientWidth || innerWidth || 1;
     const h = this.canvas.clientHeight || innerHeight || 1;
-    // 下限 0.62：界面再厚也不能把主体挤成一枚邮票
-    const free = Math.max(h * 0.62, h - this.safe.top - this.safe.bottom);
-    return { frac: free / h, lift: (this.safe.bottom - this.safe.top) / (2.4 * h) };
+    /*
+     * 下限：界面再厚也不能把主体挤成一枚邮票，但也不能高到装不下。
+     * 0.46 这一档是被手机上拧面盖那一步定住的：竖屏 844 px 里，
+     * 顶栏加上螺丝排、扭矩表、旁白与按钮实测占掉 440 px，真正空着的只剩 46%。
+     * 下限给到 0.62 的话，取景按 62% 算距离，主体就一定越过读数的上沿 ——
+     * 画面上方空着一大片，而要拧的那几颗压在读数边上。
+     */
+    const freeH = Math.max(h * 0.46, h - this.safe.top - this.safe.bottom);
+    const freeW = Math.max(w * 0.46, w - this.safe.left - this.safe.right);
+    return {
+      fracV: freeH / h,
+      fracH: freeW / w,
+      // 机位目标往留白多的那一边挪，主体就往另一边让 —— 正好落进可用区的正中
+      lift: (this.safe.bottom - this.safe.top) / (2 * h),
+      shift: (this.safe.right - this.safe.left) / (2 * w),
+    };
   }
 
   /**
    * 装下这一块需要多远。
    *
    * 竖屏手机的水平视场只有十来度 —— 按垂直视场调好的距离，横过来一定裁边。
-   * 两个方向各算一次，取远的那个。
+   * 两个方向各算一次，取远的那个，而且各按**自己那一侧的可用区**算。
    *
    * `d` 是主体沿视线方向的半深，可省。**近景不能省**：
    * 主转点轴那一步主体长 211 mm 而机位只有 190 mm 远，最靠近相机的那个角
@@ -178,10 +199,12 @@ export class Stage {
    * 判据要落在**离相机最近的那一层**上，于是需要的距离就是「中心该有的距离 + 半深」。
    */
   fitDistance({ r = 0, h = r, d = 0 }) {
+    const view = this.#viewport();
     const vHalf = (this.camera.fov * Math.PI) / 360;
     const hHalf = Math.atan(Math.tan(vHalf) * this.camera.aspect);
-    const vFree = Math.atan(Math.tan(vHalf) * this.#viewport().frac);
-    return Math.max(h / Math.tan(vFree), r / Math.tan(hHalf)) + d;
+    const vFree = Math.atan(Math.tan(vHalf) * view.fracV);
+    const hFree = Math.atan(Math.tan(hHalf) * view.fracH);
+    return Math.max(h / Math.tan(vFree), r / Math.tan(hFree)) + d;
   }
 
   /**
@@ -207,10 +230,20 @@ export class Stage {
     const fitD = fit ? this.fitDistance(fit) * 1.06 : undefined;
     const d = fitD !== undefined ? Math.max(dist ?? 0, fitD) : (dist ?? 3);
 
-    // 底部那条压掉一截画面 —— 把主体整体抬起来
-    t.y -= 2 * d * Math.tan((this.camera.fov * Math.PI) / 360) * this.#viewport().lift;
-
     const ar = (az * Math.PI) / 180, er = (el * Math.PI) / 180;
+    const view = this.#viewport();
+
+    /*
+     * 把主体挪进可用区的正中。机位目标往留白多的那一边推，主体就往反方向让。
+     * 竖向靠世界 +Y 就够；横向必须用**相机自己的右向量** ——
+     * 世界 X 在斜看时既有横向分量也有纵深分量，拿它推会把主体推近或推远。
+     */
+    const vSpan = 2 * d * Math.tan((this.camera.fov * Math.PI) / 360);
+    t.y -= vSpan * view.lift;
+    // 屏幕右方在世界里的样子：normalize(世界上 × 视线反向)，与 frameOf 量半跨度用的是同一组基底
+    const right = new THREE.Vector3(Math.sin(ar), 0, -Math.cos(ar));
+    t.addScaledVector(right, vSpan * this.camera.aspect * view.shift);
+
     this.recommend.pos.set(
       t.x + d * Math.cos(er) * Math.cos(ar),
       t.y + d * Math.sin(er),
@@ -228,8 +261,23 @@ export class Stage {
     this.controls.update();
   }
 
-  /** 动手的步骤里连「界面高度变了重新取景」也冻住。引擎每翻一步解开一次。 */
-  hold(on) { this.held = !!on; }
+  /**
+   * 动手的步骤里连「界面高度变了重新取景」也冻住 —— 手上对位时画面不能自己飘。
+   * 引擎每翻一步解开一次。
+   *
+   * **但要晚冻两帧。** 扭矩表与那一排螺丝是这一步 `enter()` 里才摆出来的，
+   * 它们占掉底下一大条；而 hold 是同一个 enter 里同步调的，
+   * 立刻冻上就意味着这一条永远算不进取景 —— 实测手机上拧面盖那一步，
+   * 主体被压在读数上沿的一线，上面空着大半屏。ResizeObserver 下一帧才回调，
+   * 让那一次让位先落地，再冻。
+   */
+  hold(on) {
+    this._holdWanted = !!on;
+    if (!on) { this.held = false; return; }
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      if (this._holdWanted) this.held = true;
+    }));
+  }
 
   /**
    * 相机只在用户没碰过的时候走向推荐机位。
@@ -252,8 +300,15 @@ export class Stage {
       this._raf = requestAnimationFrame(loop);
       this.timer.update();
       const raw = this.timer.getDelta();
-      // 补间与特效按 50 ms 封顶：一帧跳太多会把插值走过头，弹一下再回来
+      // 特效与箭头按 50 ms 封顶：它们是逐帧积分的，一帧跳太多会把状态走过头
       const dt = Math.min(raw, 0.05);
+      /*
+       * 补间另给一档 250 ms。补间是纯插值，跳多远都不会走过头，
+       * 而按 50 ms 封顶的代价很实在：弱机上（headless 软件渲染实测十来帧）
+       * 每秒只推进 0.5 秒的量，一段一秒的展开要演两秒多；软件渲染那档更慢六倍。
+       * 越是卡的机器动画越长，正好反了。
+       */
+      const slow = Math.min(raw, 0.25);
       const t = this.timer.getElapsed();
       /*
        * 相机的缓动另给一档 250 ms 的上限。
@@ -261,10 +316,10 @@ export class Stage {
        * 可 dt 一旦被压到 50 ms，弱机上（实测软件渲染只有 2–3 fps）每秒就只推进
        * 0.1–0.15 秒的量，换一步要几秒才到位 —— 越是卡的机器，镜头越慢。
        */
-      this.update(Math.min(raw, 0.25));
+      this.update(slow);
       // 单个 updater 抛错不能连坐这一帧剩下的更新 —— 记录，继续走
       for (const u of this.updaters) {
-        try { u(dt, t); } catch (e) { console.error('[updater]', e); }
+        try { u(dt, t, slow); } catch (e) { console.error('[updater]', e); }
       }
       this.renderer.render(this.scene, this.camera);
     };

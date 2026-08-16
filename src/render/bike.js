@@ -44,8 +44,6 @@ export class Bike {
     this.byName = new Map();
     /** @type {THREE.Object3D|null} */
     this.root = null;
-    this.clip = null;
-    this.mixer = null;
     /** @type {Map<THREE.Mesh, THREE.Material|THREE.Material[]>} 高亮前那份共用材质 */
     this._glow = new Map();
   }
@@ -87,14 +85,13 @@ export class Bike {
     this.size = this.bounds.getSize(new THREE.Vector3());
     this.center = this.bounds.getCenter(new THREE.Vector3());
 
-    // 上游那条 Holobike_Loop 是作者做的爆炸展开动画，356 条通道。
-    // 这里只把它挂上不播 —— 每个零件「装上去之前在哪儿」正存在这条动画里，
-    // 装配方向由 core/ 从中反推，不手写。
-    if (gltf.animations?.length) {
-      this.clip = gltf.animations[0];
-      this.mixer = new THREE.AnimationMixer(this.root);
-    }
-
+    /*
+     * 上游那条 Holobike_Loop 是作者做的爆炸展开动画，356 条通道。**一帧也不播。**
+     * 曾经以为可以从中反推每一件的装配方向，实测不成立（座管脱离方向几乎纯横向，
+     * 而立管轴是斜的；左右脚踏还朝同一侧飞出）—— 那是给镜头看的摊开展示。
+     * 装配方向一律取自几何轴，写在 assets/bike.manifest.json 里。
+     * 只在统计里报一下它还在，免得后来的人以为模型被换过。
+     */
     this.scene.add(this.root);
     this.stats = { nodes: this.byName.size, meshes, animations: gltf.animations?.length || 0 };
     return this;
@@ -145,13 +142,6 @@ export class Bike {
     const o = this.byName.get(name) ?? this.byName.get(Bike.sanitize(name));
     if (!o) throw new Error(`[bike] 模型里没有名为 "${name}" 的节点`);
     return o;
-  }
-
-  /** 按名字前缀取一组（辐条、同规格螺丝这类成批的件） */
-  all(prefix) {
-    const out = [];
-    for (const [k, v] of this.byName) if (k.startsWith(prefix)) out.push(v);
-    return out;
   }
 
   has(name) { return this.byName.has(name) || this.byName.has(Bike.sanitize(name)); }

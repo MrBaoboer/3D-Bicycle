@@ -13,8 +13,8 @@ import { tween, Ease, wait } from '../util/tween.js';
 
 /**
  * 判据一律按 gap 折算，不写绝对距离。
- * 前轮行程 0.19 m、车把 0.16 m，而灯笼那套的木条是 24 mm —— 差一个数量级。
- * 直接把毫米阈值搬过来，大件会一碰就判成方向错，小件则永远判不出来。
+ * 这台车上一件的行程从 60 mm（油管）到 220 mm（座管）差着近四倍 ——
+ * 换成一个固定的毫米阈值，行程长的件会一碰就判成方向错，短的则永远判不出来。
  */
 const K = {
   MOVED: 0.02,       // 位移超过 gap 的这个比例才算拖过，用来把单纯的点击摘出去
@@ -77,8 +77,10 @@ export class Slide {
    * @param {(id:string, seated:number, total:number)=>void} [o.onSeat] 单件到位
    * @param {()=>void} [o.onAll] 全部到位
    * @param {string} [o.wrongHint] 方向错了时说什么
+   * @param {string} [o.sound] 坐实时放哪一记，默认 SEAT_IN。
+   *   轮子落进勾爪比座管滑进立管沉，两者共用一份配方、只差增益，见 audio/sfx.js 的别名表
    */
-  begin({ partId, onSeat, onAll, wrongHint } = {}) {
+  begin({ partId, onSeat, onAll, wrongHint, sound } = {}) {
     this.cancel();
     const ids = Array.isArray(partId) ? [...partId] : [partId];
     const items = new Map();
@@ -93,7 +95,7 @@ export class Slide {
     }
     this.session = {
       items, owner, pending: new Set(ids), total: ids.length, seated: 0,
-      fails: 0, offered: false, onSeat, onAll, wrongHint,
+      fails: 0, offered: false, onSeat, onAll, wrongHint, sound: sound || 'SEAT_IN',
     };
     for (const rig of items.values()) this.#setU(rig, 0);
     this.#pulse();
@@ -152,12 +154,16 @@ export class Slide {
     const nodes = part.nodes.map((name) => {
       const obj = this.ctx.bike.get(name);
       let step = d.clone();
+      // 世界向量 → 父空间向量的线性部分。爆炸视图要沿任意方向推，不只沿装配轴，
+      // 所以这里存整个基底而不只是换算好的那一个向量
+      let basis = new THREE.Matrix3();
       if (obj.parent) {
         obj.parent.updateWorldMatrix(true, false);
         const o = obj.parent.worldToLocal(new THREE.Vector3());
         step = obj.parent.worldToLocal(d.clone()).sub(o);
+        basis.setFromMatrix4(new THREE.Matrix4().copy(obj.parent.matrixWorld).invert());
       }
-      return { obj, home: this.#home(obj), step };
+      return { obj, home: this.#home(obj), step, basis };
     });
 
     const rig = { id, name: part.name, dir: d, gap, snap, nodes, center: null, u: 1 };
@@ -185,15 +191,26 @@ export class Slide {
   }
 
   /**
-   * 把一件沿「它是从哪儿来的」方向推开这么多米 —— 爆炸视图。
+   * 把一件从装配位沿**任意世界方向**推开 —— 爆炸视图。
    *
-   * 借的还是同一条换算：每件退开的方向就是它装进来的方向取反，
-   * 于是整车摊开之后，每一件恰好停在它该来的那一侧，而不是胡乱炸开。
+   * 为什么不能只沿装配方向推（那是上一版的做法）：这台车二十七个大件里有十五个
+   * 是从侧面装进去的，装配方向全是 ±Z。一律沿装配方向退同样一段，
+   * 它们就全落到左右两个平面上摞成两摞 —— 实测四十八对在屏幕上叠掉四分之一以上，
+   * 其中十八对完全套在一起。「摊开来看清有多少东西」这件事整个没做到。
+   *
+   * 推去哪儿由 steps/util.js 的 burstOffset 算，这里只负责换算与摆位。
    * 走 park 是不行的：那个入口把 u 夹在 [0,1] 里，故意不让件飞出车外。
+   *
+   * @param {string} partId
+   * @param {THREE.Vector3} world 相对装配位的世界位移
    */
-  explode(partId, metres) {
+  burst(partId, world) {
     const rig = this.#rig(partId);
-    this.#setU(rig, 1 - metres / rig.gap);
+    const v = new THREE.Vector3();
+    for (const n of rig.nodes) {
+      n.obj.position.copy(n.home).add(v.copy(world).applyMatrix3(n.basis));
+    }
+    rig.u = 1;   // 逻辑上仍算「在装配位」，退出时 park(id, 1) 一次归位
   }
 
   /** u = 1 是装到位，u = 0 是预备位（沿 -dir 退 gap）。整组节点同时写 */
@@ -388,7 +405,7 @@ export class Slide {
 
   /**
    * 把某件送到位：补完剩下的插入，末端回弹一点点。
-   * 插入音在动作起手时就放 —— SEAT_IN 的撞击落在滑动段之后，正好压在坐实那一刻。
+   * 插入音在动作起手时就放 —— 那一记的撞击落在滑动段之后，正好压在坐实那一刻。
    */
   async seat(partId) {
     const s = this.session;
@@ -398,7 +415,7 @@ export class Slide {
     // 只剩一小段就快，autoSeat 走全程就慢：用时间说明还剩多远
     const from = rig.u;
     const dur = 0.18 + 0.42 * (1 - from);
-    this.ctx.sfx?.play('SEAT_IN', { slide: dur * 0.9 });
+    this.ctx.sfx?.play(s.sound, { slide: dur * 0.9 });
     await tween(dur, (k) => { if (this.session === s) this.#setU(rig, from + (1 - from) * k); },
       { ease: Ease.outCubic });
     if (this.session !== s) return;

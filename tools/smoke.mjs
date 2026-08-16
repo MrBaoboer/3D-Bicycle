@@ -18,10 +18,10 @@
  */
 
 import { chromium } from 'playwright';
-import { createServer } from 'node:http';
-import { readFile, mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, writeFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
-import { extname, join, resolve } from 'node:path';
+import { join, resolve } from 'node:path';
+import { serve } from './serve.mjs';
 
 const ROOT = resolve(import.meta.dirname, '..');
 const DIST = join(ROOT, 'dist');
@@ -31,31 +31,6 @@ const headed = process.argv.includes('--headed');
 
 const PATIENCE = process.env.CI ? 4 : 1;
 const tmo = (ms) => ms * PATIENCE;
-
-const MIME = {
-  '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css',
-  '.json': 'application/json', '.glb': 'model/gltf-binary',
-  '.png': 'image/png', '.jpg': 'image/jpeg', '.svg': 'image/svg+xml',
-  '.wasm': 'application/wasm', '.ktx2': 'image/ktx2',
-};
-
-/** 极简静态服务器 —— 不引 express，产物就几个文件 */
-function serve(dir) {
-  const server = createServer(async (req, res) => {
-    try {
-      const url = decodeURIComponent(req.url.split('?')[0]);
-      const file = join(dir, url === '/' ? 'index.html' : url);
-      if (!file.startsWith(dir)) { res.statusCode = 403; return res.end(); }
-      const buf = await readFile(file);
-      res.setHeader('content-type', MIME[extname(file)] || 'application/octet-stream');
-      res.end(buf);
-    } catch {
-      res.statusCode = 404;
-      res.end('not found');
-    }
-  });
-  return new Promise((ok) => server.listen(0, () => ok({ server, port: server.address().port })));
-}
 
 const results = [];
 const check = (code, title, ok, detail = '') => {
@@ -299,6 +274,146 @@ async function run(viewport, label, port) {
       && oneAtATime.after === oneAtATime.at + 1,
     JSON.stringify(oneAtATime));
 
+  // ── 对角拧紧真的在判 ──
+  //
+  // 这是三个签名交互之一，而它曾经整个失效过：bom.crossPairs 发的是紧固件对象，
+  // screw._mate 拿它跟 id 字符串比，恒不相等 —— 于是「这一颗是不是上一颗的对角」
+  // 恒假，每一组的第二、第四颗都被判成拧错，结尾自检永远多报一行，
+  // 而用户完全是按对角拧的。上一版冒烟只查了「四颗都记上账」，一句没问顺序，
+  // 所以整整一版没人发现。这一条两头都要过：拧对了要认，拧错了要抓。
+  const cross = await page.evaluate(async () => {
+    const c = window.__ctx, e = window.__engine;
+    const run = async (order) => {
+      await c.hud.onRestart();
+      await new Promise((r) => setTimeout(r, 400));
+      await e.goToStep('D2');
+      await new Promise((r) => setTimeout(r, 700));
+      for (const id of order) {
+        await c.screw.autoRun(id);
+        await new Promise((r) => setTimeout(r, 150));
+      }
+      return c.state.crossOrderOk;
+    };
+    return {
+      // 上左 → 下右 → 上右 → 下左：两条对角线各走一遍
+      good: await run(['stem-face-a', 'stem-face-b', 'stem-face-c', 'stem-face-d']),
+      // 上左 → 上右：相邻的两颗，面盖会被拽歪
+      bad: await run(['stem-face-a', 'stem-face-c', 'stem-face-b', 'stem-face-d']),
+    };
+  });
+  check(`${label}-对角`, '按对角拧算通过，拧相邻的当场记下不合格',
+    cross.good === true && cross.bad === false, JSON.stringify(cross));
+
+  // ── 拆开那一步，二十七件每一件都得看得见 ──
+  //
+  // 这一步唯一的任务是回答「这台车由多少东西组成」，那就得真的数得出来。
+  // 上一版沿装配方向一律退同样一段，而二十七件里十五件都是从侧面装的 ——
+  // 它们全落到左右两个平面上摞成两摞，实测二十三件在屏幕上露不到三成，
+  // 而所有断言照样通过：摊是摊开了，看还是看不见。
+  //
+  // 判据取像素：整幅渲染两次（有这一件 / 没这一件），差出来的就是它露在最前面的部分。
+  // 影子要先关掉 —— 换一个投影件会让整张阴影贴图重采样，逐像素差里混进一大片噪点。
+  const seen = await page.evaluate(async () => {
+    const c = window.__ctx, e = window.__engine;
+    await e.goToStep('A2');
+    for (let k = 0; k < 300; k++) {
+      if (!e.busy && c.stage.camera.position.distanceTo(c.stage.recommend.pos) < 0.02) break;
+      await new Promise((r) => setTimeout(r, 50));
+    }
+    await new Promise((r) => setTimeout(r, 400));
+    const s = c.stage;
+    const shadowWas = s.renderer.shadowMap.enabled;
+    const groundWas = s.ground.visible;
+    s.renderer.shadowMap.enabled = false;
+    s.ground.visible = false;
+    const N = 480;
+    const h = Math.max(1, Math.round((N * innerHeight) / innerWidth));
+    const cv = document.createElement('canvas');
+    cv.width = N; cv.height = h;
+    const x = cv.getContext('2d', { willReadFrequently: true });
+    const grab = () => {
+      s.renderer.render(s.scene, s.camera);
+      x.clearRect(0, 0, N, h);
+      x.drawImage(s.canvas, 0, 0, N, h);
+      return x.getImageData(0, 0, N, h).data;
+    };
+    const setVis = (id, on) => { for (const n of c.bom.nodesOf(id)) c.bike.setVisible(n, on); };
+    const full = grab();
+    const out = [];
+    for (const p of c.bom.parts) {
+      setVis(p.id, false);
+      const off = grab();
+      setVis(p.id, true);
+      let front = 0;
+      for (let i = 0; i < full.length; i += 4) {
+        if (Math.abs(full[i] - off[i]) + Math.abs(full[i + 1] - off[i + 1])
+          + Math.abs(full[i + 2] - off[i + 2]) > 12) front += 1;
+      }
+      out.push({ name: p.name, front });
+    }
+    s.renderer.shadowMap.enabled = shadowWas;
+    s.ground.visible = groundWas;
+    out.sort((a, b) => a.front - b.front);
+    return out;
+  });
+  const hidden = seen.filter((p) => p.front < 6);
+  const median = seen[Math.floor(seen.length / 2)].front;
+  check(`${label}-摊开`, '拆开那一步二十七件每一件都露得出来',
+    seen.length === 27 && hidden.length === 0 && median >= 35,
+    hidden.length ? `看不见：${hidden.map((p) => `${p.name} ${p.front}px`).join('、')}`
+      : `最小 ${seen[0].front}px · 中位 ${median}px · 最大 ${seen[26].front}px`);
+
+  // ── 整车那几张不许裁边 ──
+  //
+  // 声明 showAll 的四步（首屏成品照、爆炸图、出门前自检、收尾）画的都是整台车，
+  // 它必须完整落在画幅里 —— 这几张同时也是 README 的截图。
+  // 早先它们用一对手写的取景常量，把整车半高报小了一成多 ——
+  // 于是打开页面第一眼，后轮下缘就被切掉九十来像素，而全部断言照样通过。
+  // 判据取渲染结果：把画布缩样读回来，非背景像素的外接框不许贴到画幅四边。
+  // 量之前先把地面收掉 —— 这一条要判的是「车有没有被切掉」，
+  // 而影子铺得比车宽得多（摊开那一步尤其），把它算进去等于在判影子。
+  const whole = await page.evaluate(async () => {
+    const c = window.__ctx, e = window.__engine;
+    const groundWas = c.stage.ground.visible;
+    c.stage.ground.visible = false;
+    const out = [];
+    for (let i = 0; i < e.steps.length; i++) {
+      if (!e.steps[i].showAll) continue;
+      await e.go(i);
+      for (let k = 0; k < 120; k++) {
+        if (!e.busy && c.stage.camera.position.distanceTo(c.stage.recommend.pos) < 0.02) break;
+        await new Promise((r) => setTimeout(r, 50));
+      }
+      await new Promise((r) => setTimeout(r, 250));
+      const s = c.stage;
+      s.renderer.render(s.scene, s.camera);
+      const N = 160;
+      const h = Math.max(1, Math.round((N * innerHeight) / innerWidth));
+      const g2 = document.createElement('canvas');
+      g2.width = N; g2.height = h;
+      const x = g2.getContext('2d', { willReadFrequently: true });
+      x.drawImage(s.canvas, 0, 0, N, h);
+      const d = x.getImageData(0, 0, N, h).data;
+      const bg = [d[0], d[1], d[2]];
+      let x0 = N, y0 = h, x1 = -1, y1 = -1;
+      for (let p = 0; p < N * h; p++) {
+        const i4 = p * 4;
+        if (Math.abs(d[i4] - bg[0]) + Math.abs(d[i4 + 1] - bg[1]) + Math.abs(d[i4 + 2] - bg[2]) < 14) continue;
+        const px = p % N, py = (p / N) | 0;
+        if (px < x0) x0 = px; if (px > x1) x1 = px;
+        if (py < y0) y0 = py; if (py > y1) y1 = py;
+      }
+      out.push({ id: e.steps[i].id, x0, y0, x1: N - 1 - x1, y1: h - 1 - y1, N, h });
+    }
+    c.stage.ground.visible = groundWas;
+    return out;
+  });
+  // 缩样一格约等于画幅的 1/160，留一格容差
+  const cut = whole.filter((w) => w.x0 < 1 || w.y0 < 1 || w.x1 < 1 || w.y1 < 1);
+  check(`${label}-整车`, '整车那四张（成品照、爆炸图、自检、收尾）完整落在画幅内',
+    whole.length === 4 && cut.length === 0,
+    cut.length ? cut.map((w) => `${w.id} 贴边`).join('、') : `${whole.length} 张`);
+
   // ── 主题 ──
   const theme = await page.evaluate(async () => {
     const read = () => ({
@@ -319,15 +434,28 @@ async function run(viewport, label, port) {
   // ── 键盘 ──
   const kb = await page.evaluate(async () => {
     const e = window.__engine;
+    // 等到这一步真的铺完。固定睡几百毫秒是不行的：「拆开看看」进场要演两秒多，
+    // 睡醒时引擎还忙着，这时按下的那一下会被攒起来晚一点才补 ——
+    // 断言在补上之前读数，看着就像方向键失灵，而它其实工作得好好的
+    const idle = async () => {
+      for (let k = 0; k < 200; k++) {
+        if (!e.busy) return;
+        await new Promise((r) => setTimeout(r, 50));
+      }
+    };
+    const press = async (key) => {
+      dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }));
+      await new Promise((r) => setTimeout(r, 120));
+      await idle();
+      await new Promise((r) => setTimeout(r, 120));
+      return e.index;
+    };
     await e.goToStep('A1');
-    await new Promise((r) => setTimeout(r, 400));
+    await idle();
     const at0 = e.index;
-    dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true, cancelable: true }));
-    await new Promise((r) => setTimeout(r, 700));
-    const at1 = e.index;
-    dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true, cancelable: true }));
-    await new Promise((r) => setTimeout(r, 700));
-    return { at0, at1, at2: e.index };
+    const at1 = await press('ArrowRight');
+    const at2 = await press('ArrowLeft');
+    return { at0, at1, at2 };
   });
   check(`${label}-键盘`, '方向键前进与后退',
     kb.at0 === 0 && kb.at1 === 1 && kb.at2 === 0, JSON.stringify(kb));
