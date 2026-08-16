@@ -1,0 +1,32 @@
+{
+  "name": "bike-manual",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "网购自行车整车 · 开箱组装的 3D 分步交互说明书",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "lint": "eslint .",
+    "test": "node --test tools/unit.test.mjs",
+    "model": "node tools/glb-tree.mjs public/models/CarbonFrameBike.glb",
+    "verify": "node tools/check-manifest.mjs",
+    "check:code": "npm run lint && npm test && npm run verify && npm run build",
+    "smoke": "node tools/smoke.mjs",
+    "check": "npm run check:code && npm run smoke"
+  },
+  "engines": {
+    "node": "^22.13.0 || >=24.0.0"
+  },
+  "dependencies": {
+    "three": "^0.185.1"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.8.1",
+    "globals": "^17.9.0",
+    "playwright": "^1.62.1",
+    "vite": "^8.2.1"
+  }
+}

@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>开箱装车 · 3D 分步说明书</title>
+<meta name="description" content="网购整车到家，从纸箱到能骑走。装前轮、装车把、装座管、装脚踏，每一步都能亲手拖、亲手拧。" />
+<meta name="color-scheme" content="light dark" />
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='26'>🚲</text></svg>" />
+</head>
+<body>
+  <canvas id="stage" aria-label="三维装配画面"></canvas>
+
+  <!-- 封面：三维就绪之前挡在前面 -->
+  <div id="cover">
+    <div class="cover-in">
+      <h1 class="cover-t">开箱装车</h1>
+      <p class="cover-s">车到了，箱子还没拆</p>
+      <div class="cover-bar"><i id="cover-bar"></i></div>
+      <p id="cover-msg" class="cover-msg">正在搬进屋</p>
+      <div id="cover-act" hidden></div>
+    </div>
+  </div>
+
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>
