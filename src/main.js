@@ -59,12 +59,22 @@ async function main() {
   /*
    * WebGL 上下文可能被系统回收（移动端切后台常见）—— 不处理就是永久黑屏。
    * preventDefault() 之后浏览器会尝试恢复，three 会把资源按需重传。
+   *
+   * 挡回来的那一层要退回**不透明**那一档：就绪之后封面只剩一道横向渐隐，
+   * 半边是透的，而此刻透出去的是一块刚被回收的画布。
+   * 「开始装车」也得收起来 —— 画面还没回来，按下去只会把人送进一个空舞台。
    */
+  // 这两个变量在下面才有内容，但上下文丢失可能发生在**读模型的那几秒里** ——
+  // 那时下面的代码还没跑到，所以先在这里备好，不能用 const 等到那时候再声明
+  let entered = false;
+  let framePoster = () => {};
   stage.canvas.addEventListener('webglcontextlost', (e) => {
     e.preventDefault();
     stage.stop();
+    delete cover.dataset.ready;
     cover.hidden = false;
     cover.classList.remove('gone');
+    coverAct.hidden = true;
     coverMsg.hidden = false;
     coverMsg.classList.add('bad');
     coverMsg.textContent = '浏览器回收了图形资源，正在找回画面';
@@ -73,8 +83,16 @@ async function main() {
     stage.resize();
     stage.start();
     coverMsg.classList.remove('bad');
-    cover.classList.add('gone');
-    setTimeout(() => { cover.hidden = true; }, 1000);
+    coverMsg.hidden = true;
+    cover.dataset.ready = '1';
+    // 还没开始过的，把封面原样交还（连同那两枚按钮）；已经在装的，让封面退场
+    if (entered) {
+      cover.classList.add('gone');
+      setTimeout(() => { cover.hidden = true; }, 1000);
+    } else {
+      coverAct.hidden = false;
+      framePoster();
+    }
   });
 
   // 加载期只报两件事：车还在读（占掉九成时间，进度条说得清）、正在架好。
@@ -84,6 +102,9 @@ async function main() {
   await bike.load((p) => progress(p * 0.85, '正在把车搬进来'));
 
   const hud = new HUD(state);
+  // 封面还挡着的时候界面不该在背后待命：封面一变成半透，顶栏与底部提示会透出来，
+  // 而它们说的还是「第 0 步」。等按下「开始装车」再摆出来
+  hud.showChrome(false);
   const fx = new Fx(stage.scene, tier);
   const guides = new Arrows(stage.scene);
   const bolts = new Bolts(stage.scene, BOM);
@@ -119,14 +140,11 @@ async function main() {
     await engine.restart();
   };
 
-  // 切到别的标签页时把声音停住。画面走 rAF 本来就停了
-  addEventListener('visibilitychange', () => {
-    if (document.hidden) SFX.suspendLoops(); else SFX.resumeLoops();
-  });
-
   // ── 主循环 ──
-  stage.updaters.add((dt) => {
-    tickTweens(dt);
+  // 补间走 slow（按真实流逝时间，封顶 250 ms），特效与箭头走 dt（封顶 50 ms）。
+  // 理由见 stage.start()：补间按 50 ms 封顶会让弱机上的动画整段拖长
+  stage.updaters.add((dt, t, slow) => {
+    tickTweens(slow);
     fx.update(dt);
     guides.update(dt);
     hud.updateSpots(stage.camera);
@@ -139,6 +157,26 @@ async function main() {
 
   progress(1);
   await sleep(160);
+
+  /*
+   * 封面让开半边，车摆进另外半边。
+   *
+   * 摆进哪半边不写死：把封面那块字实际占掉的宽（或窄屏上的高）报给舞台的安全区，
+   * 取景那套机制会自己把车推到剩下那块的正中。宽屏字在左，车就靠右；
+   * 窄屏字在下，车就浮到上面 —— 两档共用同一条路径，版式改了也不用回来改这里。
+   */
+  framePoster = () => {
+    const box = cover.querySelector('.cover-in').getBoundingClientRect();
+    // 与 styles.css 里那两条媒体查询同一个判据：窄屏摞起来，
+    // 手机横过来时竖向不够，换回左右分栏
+    const stacked = matchMedia('(max-width: 860px)').matches
+      && !matchMedia('(max-height: 540px) and (orientation: landscape)').matches;
+    stage.setSafeArea(stacked
+      ? { top: 0, bottom: Math.round(innerHeight - box.top) }
+      : { top: 0, bottom: 0, left: Math.round(box.right) });
+    stage.setRecommended({ ...engine.steps[0].cam, target: new THREE.Vector3(...engine.steps[0].cam.target) });
+    stage.snapToRecommended();
+  };
   cover.dataset.ready = '1';
   coverMsg.hidden = true;
   // 读完了，进度条就没有可说的了 —— 留着一条满格的橙线只会跟主按钮抢注意力
@@ -148,9 +186,16 @@ async function main() {
     <button class="btn btn-primary" id="cv-go">开始装车</button>
     <button class="btn btn-text" id="cv-help">先看怎么操作</button>`;
   coverAct.querySelector('#cv-go').focus();
+  // 版式已经换成让开半边的那一档了，量完再摆车
+  await frame();
+  framePoster();
+  const onCoverResize = () => { if (!cover.hidden) framePoster(); };
+  addEventListener('resize', onCoverResize);
 
   const enter = async () => {
+    entered = true;
     coverAct.querySelectorAll('button').forEach((b) => { b.disabled = true; });
+    removeEventListener('resize', onCoverResize);
     cover.classList.add('gone');
     setTimeout(() => { cover.hidden = true; }, 1000);
     hud.showChrome(true);

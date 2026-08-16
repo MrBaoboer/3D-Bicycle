@@ -19,16 +19,22 @@ import * as THREE from 'three';
 import { icon } from './icons.js';
 import { torqueText } from '../core/state.js';
 
-/** 怎么操作。前四条第一次进来就该知道，后两条留给右上角的完整版。touch 是触屏机型的替换句 */
+/**
+ * 怎么操作。前四条第一次进来就该知道，后两条留给右上角的完整版。
+ * touch 是触屏机型的替换句。
+ *
+ * 左边那一栏分两种：`keys` 是真的按键，画成键帽；`ico` 是手势与界面元件，
+ * 画成一枚圆图标。混成一种的话，「转画面」会长得像键盘上有个「转」键。
+ */
 const GUIDE = [
-  { k: ['arrow-left', 'arrow-right'], t: '翻到上一步、下一步。键盘 <em>←</em> <em>→</em> 一样管用',
-    touch: '点底部两角的箭头，翻到上一步、下一步' },
-  { k: ['rotate'], t: '按住画面拖，换个角度看；滚轮缩放。转到哪儿就停在哪儿',
+  { keys: ['arrow-left', 'arrow-right'], t: '翻到上一步、下一步。键盘 <em>←</em> <em>→</em> 一样管用',
+    touch: '点画面左右两边的箭头，翻到上一步、下一步' },
+  { ico: 'rotate', t: '按住画面拖，换个角度看；滚轮缩放。转到哪儿就停在哪儿',
     touch: '按住画面拖，换个角度看；双指开合缩放。转到哪儿就停在哪儿' },
-  { k: ['drag'], t: '零件顺着箭头指的方向拖，快到位会自己吸住' },
-  { k: ['screw'], t: '螺丝按住绕圈拧，扭矩表走进绿区就停手' },
-  { k: ['menu'], t: '深色、声音、扭矩单位，都在右上角那枚按钮里', full: true },
-  { k: ['wrench'], t: '不想自己动手，按「帮我装上」自动做完 —— 该看的、该听的一样不少', full: true },
+  { ico: 'drag', t: '零件顺着箭头指的方向拖，快到位会自己吸住' },
+  { ico: 'screw', t: '螺丝按住绕圈拧，扭矩表走进绿区就停手' },
+  { ico: 'menu', t: '深色、声音、扭矩单位，都在右上角那枚按钮里', full: true },
+  { ico: 'wrench', t: '不想自己动手，按「帮我装上」自动做完 —— 该看的、该听的一样不少', full: true },
 ];
 
 /**
@@ -54,6 +60,11 @@ function bindActions(root, list) {
 
 /** 键帽：认得的名字画成线稿图标，认不得的直接印字 */
 const cap = (name) => `<span class="kbd">${icon(name) || name}</span>`;
+
+/** 一行「怎么操作」左边那一栏 */
+const guideMark = (r) => (r.keys
+  ? r.keys.map(cap).join('')
+  : `<span class="guide-ico">${icon(r.ico)}</span>`);
 
 // ══════════════ 扭矩表的几何 ══════════════
 
@@ -181,7 +192,7 @@ export class HUD {
 
     this.spots = [];
     this.steps = [];
-    this._safe = { top: 0, bottom: 0 };
+    this._safe = { top: 0, bottom: 0, left: 0, right: 0 };
     this._chrome = true;
     this._menu = null;
     this._tip = null;
@@ -214,11 +225,13 @@ export class HUD {
       if (this._escape) { const fn = this._escape; this._escape = null; fn(); }
     });
 
-    // 顶上和底下这两条一变高，三维的取景就得跟着让位
+    // 四周这几件一变大小，三维的取景就得跟着让位。说明卡也在列 ——
+    // 它在宽屏上占掉右边 300 px，不观察它的话，摊开卡片那一下车不会让开
     this._ro = new ResizeObserver(() => this.#syncSafe());
     this._ro.observe(this.el.topbar);
     this._ro.observe(this.el.foot);
     this._ro.observe(this.el.readout);
+    this._ro.observe(this.el.note);
     addEventListener('resize', () => { this.#syncSafe(); this.#layoutNote(); });
     // 手机横过来时 resize 未必先到，orientationchange 补一道
     addEventListener('orientationchange', () => { this.#syncSafe(); this.#layoutNote(); });
@@ -229,10 +242,11 @@ export class HUD {
   // ══════════════ 让位 ══════════════
 
   /**
-   * 量一下界面实际占掉了画面的哪两条边，交给 stage.setSafeArea。
+   * 量一下界面实际占掉了画面的哪几条边，交给 stage.setSafeArea。
    *
    * 不是装饰性的细节：扭矩表和一排螺丝摊在底下时，三维若不知道自己只剩上面那块，
    * 正在拧的那颗螺栓就会被读数压住 —— 而这一步要看的正是它。
+   * 宽屏上右边那张说明卡同理，它有 300 px 宽。
    */
   #syncSafe() {
     const vh = innerHeight;
@@ -275,8 +289,23 @@ export class HUD {
     if (bar) rise(this.el.readout);
     this.el.overlay.querySelectorAll('.dock').forEach(rise);
 
-    const next = { top: Math.round(top), bottom: Math.round(bottom) };
-    if (next.top === this._safe.top && next.bottom === this._safe.bottom) return;
+    /*
+     * 右边那一列。判据同样用几何而不是元素身份：贴着右缘、且高得能挡住主体，
+     * 才算「右边被占掉了」。窄屏上这一列是横铺在底部的，左沿落在屏幕左半边，
+     * 这一条自然不成立 —— 它已经算进 bottom 里了，再算一次会让车横着缩一半。
+     */
+    let right = 0;
+    for (const el of [this.el.note, this.el.readout]) {
+      const r = box(el);
+      if (!r || !r.height) continue;
+      if (r.left < innerWidth * 0.6 || innerWidth - r.right > 48) continue;
+      if (r.height < vh * 0.12) continue;
+      right = Math.max(right, innerWidth - r.left);
+    }
+
+    const next = { top: Math.round(top), bottom: Math.round(bottom), left: 0, right: Math.round(right) };
+    const p = this._safe;
+    if (next.top === p.top && next.bottom === p.bottom && next.right === p.right) return;
     this._safe = next;
     this.onSafeArea?.(next);
   }
@@ -302,14 +331,33 @@ export class HUD {
       byPhase[p].push({ i, s });
     });
 
+    /*
+     * 整条轨只占一个 Tab 位，进去之后用方向键在格子之间走（roving tabindex）。
+     * 二十九个格子各占一个 Tab 位的话，键盘用户要按二十九下才够得着「下一步」，
+     * 而那是全程唯一的前进入口。
+     */
     this.el.chapters.innerHTML = byPhase.map((list, p) => `
       <div class="ch" data-p="${p}">
         <div class="ch-ticks">${list.map(({ i, s }) => `
-          <button class="tick" type="button" data-i="${i}"
+          <button class="tick" type="button" data-i="${i}" tabindex="${i === 0 ? 0 : -1}"
                   aria-label="第 ${i + 1} 步 ${s.title}"></button>`).join('')}
         </div>
         <span class="ch-nm">${names[p]}</span>
       </div>`).join('');
+
+    // 方向键在轨内走格子。这里不会跟「方向键翻页」打架 —— 引擎那一条
+    // 见焦点落在按钮上就不接管，正是为这种控件留的
+    this.el.chapters.addEventListener('keydown', (e) => {
+      const dir = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1
+        : e.key === 'Home' ? 'first' : e.key === 'End' ? 'last' : 0;
+      if (!dir || !e.target.closest('.tick')) return;
+      e.preventDefault();
+      const ticks = [...this.el.chapters.querySelectorAll('.tick')];
+      const at = ticks.indexOf(e.target);
+      const to = dir === 'first' ? 0 : dir === 'last' ? ticks.length - 1
+        : Math.min(ticks.length - 1, Math.max(0, at + dir));
+      ticks[to]?.focus();
+    });
 
     // 每一章按它有几步分宽度。五章等宽的话，只有一步的那章会摊出一格很宽的方块，
     // 而「点一下跳到那一步」正是引导里写着的用法 —— 宽窄本身就是进度。
@@ -365,6 +413,8 @@ export class HUD {
       t.dataset.state = state;
       t.setAttribute('aria-label',
         `第 ${i + 1} 步 ${this.steps[i]?.title || ''}，${state === 'done' ? '已走过' : state === 'now' ? '当前' : '还没到'}`);
+      // Tab 进来时落在当下这一格，不是永远落在第一格
+      t.tabIndex = state === 'now' ? 0 : -1;
       if (state === 'now') t.setAttribute('aria-current', 'step');
       else t.removeAttribute('aria-current');
     });
@@ -720,7 +770,7 @@ export class HUD {
       title: '怎么操作',
       body: `<div class="guide">${rows.map((r) => `
         <div class="guide-row">
-          <div class="guide-k">${r.k.map(cap).join('')}</div>
+          <div class="guide-k">${guideMark(r)}</div>
           <div class="guide-t">${(touch && r.touch) || r.t}</div>
         </div>`).join('')}</div>`,
       actions: [{ label, kind: 'primary', on: done }],
@@ -876,7 +926,7 @@ export class HUD {
     o.innerHTML = '';
     this.#setChromeInert(false);
     this._escape = null;
-    if (this._returnFocus?.isConnected) this._returnFocus.focus();
+    this.#handBack(this._returnFocus);
     this._returnFocus = null;
     this.#syncSafe();
     return o;
@@ -930,6 +980,16 @@ export class HUD {
     });
   }
 
+  /**
+   * 焦点交还给打开这一层的那个控件。它可能已经不在了（首次进入的引导卷是封面
+   * 打开的，收起时封面正在化开、按钮已经禁用）—— 那就交给「下一步」，
+   * 它是全程唯一的前进入口，总比掉回 body 强。
+   */
+  #handBack(from) {
+    if (from?.isConnected && !from.disabled && !from.hidden) { from.focus(); return; }
+    if (!this.el.next.hidden && !this.el.next.disabled) this.el.next.focus();
+  }
+
   /** 收起最上面那一层；底下压着的那一步自己的坞会原样回来 */
   hideOverlay() {
     if (this._top) {
@@ -937,7 +997,7 @@ export class HUD {
       this._top = null;
       this.#paintOverlay();
       l.onGone?.();
-      if (l.from?.isConnected) l.from.focus();
+      this.#handBack(l.from);
       return;
     }
     const l = this._base;
@@ -955,16 +1015,25 @@ export class HUD {
     for (const l of gone) l?.onGone?.();
   }
 
+  /** 设置菜单摊着 —— 此时方向键在菜单里用，不该在背后翻页 */
+  get menuOpen() { return !!this._menu; }
+
   get overlayOpen() { return !this.el.overlay.hidden; }
 
   /** 盖住画面的那一种。此时方向键不该在背后翻页 */
   get modalOpen() { return this.overlayOpen && this.el.overlay.classList.contains('veil'); }
 
-  /** 整层界面退场，只剩车 */
+  /**
+   * 整层界面退场，只剩车。封面还挡着的那一段走的就是这一档。
+   * 两枚翻页各自 fixed 在屏幕两侧、不在底部那一块里 —— 漏掉它们的话，
+   * 封面让开半边之后，右边缘会孤零零挂着一枚指向下一步的箭头。
+   */
   showChrome(v) {
     this._chrome = !!v;
     this.el.topbar.hidden = !v;
     this.el.foot.hidden = !v;
+    this.el.prev.hidden = !v;
+    this.el.next.hidden = !v;
     if (!v) { this.setNote(null); this.clearSpots(); }
     this.#syncReadout();
   }

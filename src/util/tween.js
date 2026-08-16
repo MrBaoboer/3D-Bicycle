@@ -1,26 +1,20 @@
 /** 极简补间与缓动 —— 全片动画的统一时基 */
 
+/** 只留在用的这几条。没有生产者的缓动一律不留 —— 留着的下场是有人照着挑一条，
+ *  而它从来没在这套画面上试过 */
 export const Ease = {
   linear: (t) => t,
-  inQuad: (t) => t * t,
   outQuad: (t) => 1 - (1 - t) * (1 - t),
   inOutQuad: (t) => (t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2),
   outCubic: (t) => 1 - Math.pow(1 - t, 3),
-  inCubic: (t) => t * t * t,
   inOutCubic: (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2),
-  outBack: (t) => 1 + 2.2 * Math.pow(t - 1, 3) + 1.2 * Math.pow(t - 1, 2),
-  outElastic: (t) => (t === 0 || t === 1 ? t
-    : Math.pow(2, -9 * t) * Math.sin((t * 10 - 0.75) * ((2 * Math.PI) / 3)) + 1),
-  /** M1 引火：指数曲线 —— 前 0.9 s 只到 30%，最后 0.3 s 冲到 100%。
-   *  线性曲线会让点亮显得平淡，这是「点亮感」的关键。 */
-  ignite: (t) => Math.pow(t, 3.6),
 };
 
 /**
  * 用户要求「减少动效」。
  *
  * CSS 那一侧已由 base.css 的 @media 关掉了；这一条给 JS 驱动的动效用 ——
- * 封面自转、挂灯摆动、火焰跳动这类**持续不停**的运动，CSS 管不到。
+ * 方向箭头的呼吸、镜头缓动这类**持续不停**的运动，CSS 管不到。
  * 每次读实时值，用户在系统里改了设置不必刷新页面。
  */
 export const reducedMotion = () =>
@@ -91,18 +85,4 @@ export function cancelAll() {
   for (const t of [...running]) t.cancel();
   for (const w of waits) clearTimeout(w.id);
   waits.clear();
-}
-
-/** 数值弹簧（用于拖拽阻尼与回弹） */
-export class Spring {
-  constructor(value = 0, { stiffness = 170, damping = 22 } = {}) {
-    this.value = value; this.target = value; this.v = 0;
-    this.k = stiffness; this.d = damping;
-  }
-  step(dt) {
-    const a = this.k * (this.target - this.value) - this.d * this.v;
-    this.v += a * dt;
-    this.value += this.v * dt;
-    return this.value;
-  }
 }

@@ -23,10 +23,29 @@
   flex-direction: column;
   gap: var(--s3);
   padding: var(--pad-top) var(--pad-right) var(--s4) var(--pad-left);
-  /* 顶上不做实底，一层由上往下的渐隐够读，也不挡画面 */
-  background: var(--scrim);
   pointer-events: none;
   transition: opacity var(--t-slow) var(--ease);
+}
+
+/*
+ * 顶上不做实底 —— 一条横贯屏幕的板会把画面切掉一截。
+ * 但只铺一层渐隐是不够的：近景那十几步里，顶栏底下压着的是碳纤维编织纹、
+ * 黄色轮圈、黑色胎侧，步名与章节名在上面几乎读不出来。
+ * 所以这一层除了渐隐还要**把背后糊掉**：高频纹理一模糊，字就浮起来了，
+ * 而颜色与明暗还在，画面并没有被切断。
+ * 糊的那一层自己也得渐隐收边（mask），否则会在半空留下一道生硬的分界线。
+ */
+.topbar::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: var(--scrim);
+  -webkit-backdrop-filter: blur(14px) saturate(1.1);
+  backdrop-filter: blur(14px) saturate(1.1);
+  -webkit-mask-image: linear-gradient(to bottom, #000 58%, transparent 100%);
+  mask-image: linear-gradient(to bottom, #000 58%, transparent 100%);
+  pointer-events: none;
 }
 
 .topbar > * { pointer-events: auto; }
@@ -368,7 +387,8 @@
   flex-direction: column;
   align-items: center;
   gap: var(--s3);
-  padding: 0 calc(var(--pad-right) + 64px) var(--pad-bottom) calc(var(--pad-left) + 64px);
+  /* 两枚翻页在左右两边的中腰，不在底部两角 —— 这里不必再给它们让出 64 px */
+  padding: 0 var(--pad-right) var(--pad-bottom) var(--pad-left);
   pointer-events: none;
   transition: opacity var(--t-slow) var(--ease);
 }
@@ -692,13 +712,19 @@
   @keyframes note-up { from { opacity: 0; transform: translateY(10px); } }
   .note-tab { display: inline-flex; }
 
-  .foot { padding-left: calc(var(--s3) + var(--sa-left) + 58px);
-          padding-right: calc(var(--s3) + var(--sa-right) + 58px); }
+  .foot { padding-left: calc(var(--s3) + var(--sa-left));
+          padding-right: calc(var(--s3) + var(--sa-right)); }
   .nav-prev { left: calc(var(--s2) + var(--sa-left)); }
   .nav-next { right: calc(var(--s2) + var(--sa-right)); }
   .nav { width: 44px; height: 44px; }
 
+  /* 竖屏上这一列整个压在画面下方，占掉多少就得从车那边扣多少 —— 能收就收 */
   .bolt-nm { display: none; }          /* 只留点，名字挤不下 */
+  .bolts { padding: 6px var(--s3); }
+  .gauge { padding: var(--s1) var(--s3); gap: 0 var(--s2); }
+  .dial { width: 68px; height: 46px; }
+  .gauge-nm { font-size: var(--fs-mid); }
+
   .toast { top: 13%; font-size: var(--fs-tiny); }
   .menu { top: auto; bottom: calc(var(--bar-h, 0px) + var(--s3)); left: var(--pad-left); right: var(--pad-right); }
 }

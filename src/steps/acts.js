@@ -14,8 +14,8 @@
  */
 
 import {
-  AIM_BIKE, FIT_BIKE, BURST, V,
-  shot, frameWhole, installPart, partCenter, torqueRow, toolList, fasten, fastenGroup,
+  V, shot, frameWhole, frameBolts, burstOffset, burstReset, BURST_VIEW,
+  installPart, partCenter, torqueRow, toolList, fasten, fastenGroup,
 } from './util.js';
 import { torqueText } from '../core/state.js';
 import { tween, Ease } from '../util/tween.js';
@@ -23,8 +23,20 @@ import { tween, Ease } from '../util/tween.js';
 /** 顶部章节名，按 phase 取。**这是唯一一份** —— 界面层不再自带一套 */
 export const PHASES = ['开箱', '后三角', '前端', '操控', '传动', '轮组', '刹车', '上路'];
 
+/**
+ * 拆开那一步摊多久、错峰摊掉其中多少。
+ *
+ * 2.6 秒不是随手给的：二十七件分八层剥，每层之间要留得出一眼看清的间隔，
+ * 而整段又不能长到让人想按下一步。错峰占掉六成 —— 剩下四成是每一件自己飞出去的时间，
+ * 太短会甩，太长会拖。
+ */
+const BURST_TIME = 2.6;
+const BURST_STAGGER = 0.6;
+
+const clamp01 = (x) => Math.max(0, Math.min(1, x));
+
 /** 推入一件的标准步骤：取景现算、亮起、拖到位 */
-const push = (ctx, { id, phase, title, cue, parts, hint, note, dir, cam, pad }) => ({
+const push = (ctx, { id, phase, title, cue, parts, hint, note, dir, cam, pad, sound }) => ({
   id,
   phase,
   title,
@@ -33,7 +45,7 @@ const push = (ctx, { id, phase, title, cue, parts, hint, note, dir, cam, pad }) 
   cue,
   note,
   enter(c, engine) {
-    installPart(c, parts, { hint, onDone: () => engine.done() });
+    installPart(c, parts, { hint, sound, onDone: () => engine.done() });
   },
   exit(c) { c.slide.cancel(); for (const p of parts) c.slide.park(p, 1); },
 });
@@ -48,7 +60,9 @@ export function acts(ctx) {
       phase: 0,
       title: '装完是这样',
       showAll: true,
-      cam: { az: 38, el: 14, target: AIM_BIKE, fit: FIT_BIKE, snap: true },
+      // 整车这三张（A1 / H4 / H5）也从几何现量。手写的那一对常量把整车半高
+      // 报小了一成多，于是首屏第一眼的成品照下缘就切掉一截后轮
+      cam: { ...frameWhole(ctx, { az: 38, el: 14 }), snap: true },
       cue: '拖动画面转一圈。点标号看看四处要点',
       enter(c) {
         const marks = [
@@ -64,39 +78,60 @@ export function acts(ctx) {
     },
     {
       /*
-       * 拆开看看。每一件沿「它是从哪儿装进来的」方向推开 30 cm ——
-       * 于是摊开之后每件都停在它该来的那一侧，看着是一台车散成了零件，
-       * 而不是一堆东西胡乱炸开。这一步不教任何操作，它只回答一个问题：
-       * 这台车到底由多少东西组成。
+       * 拆开看看。这一步不教任何操作，它只回答一个问题：这台车到底由多少东西组成。
+       *
+       * 摊开的方式是有讲究的，见 util.js 的 burstOffset：径向等比放大把件彼此分开，
+       * 再沿「它是从哪一侧装进来的」反方向推一段，同轴套在一起的那几件才散得开。
+       *
+       * 时间上**按装配顺序倒着走**：最后装上的先飞出去，车架最后剩下。
+       * 一口气全炸开只是一次位移，看不出层次；倒着一层层剥，
+       * 眼睛跟得上，而且顺带把「这台车是分几层长起来的」说了一遍 ——
+       * 下一步「从一根车架开始」正好接住。
        */
       id: 'A2',
       phase: 0,
       title: '拆开看看',
       showAll: true,
-      cam: frameWhole(ctx, { explode: BURST, az: 42, el: 16 }),
-      cue: `${ctx.bom.counts.parts} 个大件、${ctx.bom.counts.fasteners} 颗要上扭矩的螺丝`,
-      note: {
-        title: '这一遍要装多少',
-        spec: [
-          ['大件', `${ctx.bom.counts.parts} 件`],
-          ['上扭矩的螺丝', `${ctx.bom.counts.fasteners} 颗`],
-          ['工具', toolList(ctx)],
-        ],
+      // 机位与位移共用同一组 az/el：位移是在这个机位的屏幕平面里算的，两边必须一致
+      cam: frameWhole(ctx, { burst: true, ...BURST_VIEW }),
+      /*
+       * 这一步不挂说明卡。原先那张卡三行里有两行与底下这句旁白一字不差
+       * （二十七件、七颗），只有「工具」一行是新的 —— 而它在宽屏上占掉右边
+       * 三百三十二像素，正好是这一步唯一要做的事：把二十七件摊开给人看。
+       * 一行旁白说得完的事，不值得用四分之一个画幅去说第二遍。
+       */
+      cue: `${ctx.bom.counts.parts} 个大件、${ctx.bom.counts.fasteners} 颗要上扭矩的螺丝 · 工具 ${toolList(ctx)}`,
+      async enter(c, engine) {
+        // 每一件的出场时刻：装得越晚，飞得越早。没人装的（车架这类底座）当第 0 步
+        const last = engine.steps.length - 1;
+        const startOf = new Map(c.bom.parts.map((p) => {
+          const at = c.build?.stepOf(p.id) ?? 0;
+          return [p.id, (1 - at / last) * BURST_STAGGER];
+        }));
+
+        // 镜头同时绕过去一点。位移之外再给一层视差，摊开这件事才有纵深
+        const cam = this.cam;
+        c.stage.setRecommended({ ...cam, az: cam.az - 20, target: V(cam.target) });
+        c.stage.snapToRecommended();
+        c.stage.setRecommended({ ...cam, target: V(cam.target), ease: 0.55 });
+
+        // 第二个参数是没过缓动的线性进度 —— 错峰要按真实时间排，不能按缓动后的
+        await tween(BURST_TIME, (_, t) => {
+          for (const p of c.bom.parts) {
+            const k = (t - startOf.get(p.id)) / (1 - BURST_STAGGER);
+            c.slide.burst(p.id, burstOffset(c, p.id, Ease.outCubic(clamp01(k))));
+          }
+        }, { ease: Ease.linear });
       },
-      async enter(c) {
-        // 从合装态摊开，而不是一上来就摊着 —— 摊开的那一下才是这一步要给人看的
-        await tween(1.15, (k) => {
-          for (const p of c.bom.parts) c.slide.explode(p.id, BURST * k);
-        }, { ease: Ease.outCubic });
-      },
-      exit(c) { for (const p of c.bom.parts) c.slide.park(p.id, 1); },
+      exit(c) { burstReset(c); },
     },
     {
       id: 'A3',
       phase: 0,
       title: '从一根车架开始',
       installs: [],
-      cam: { az: 40, el: 12, target: [0.12, 0.65, 0], fit: { r: 0.62, h: 0.42 } },
+      // 这一步画面上只剩光车架 —— 取景就量它，别的件此刻都还在箱子里
+      cam: frameWhole(ctx, { bare: true, az: 40, el: 12 }),
       cue: '其余全在箱子里。接下来一件件长上去',
     },
 
@@ -148,7 +183,6 @@ export function acts(ctx) {
       cue: '两只碗从两头压进头管',
       hint: '顺着头管的方向压',
       dir: [-0.4228, -0.9062, 0],
-      pad: 1.35,
     }),
     P({
       id: 'C2',
@@ -186,7 +220,7 @@ export function acts(ctx) {
       phase: 3,
       title: '四颗面盖螺丝',
       fastens: ['stem-face-a', 'stem-face-b', 'stem-face-c', 'stem-face-d'],
-      cam: shot(ctx, ['handlebar'], { cam: { az: 170, el: 26 } , pad: 0.34 }),
+      cam: frameBolts(ctx, 'stem-face', { az: 170, el: 26 }),
       cue: '按对角顺序拧，四颗分两轮',
       note: {
         title: '为什么必须对角',
@@ -207,8 +241,9 @@ export function acts(ctx) {
             paint();
           },
           onAll: () => {
-            c.hud.toast(c.state.crossOrderOk === false ? '四颗都上了，但跳过了对角' : '四颗都到位，缝隙是匀的',
-              { tone: c.state.crossOrderOk === false ? 'stop' : 'go' });
+            const skipped = c.state.crossOrderOk === false;
+            c.hud.toast(skipped ? '四颗都上了 —— 但有一颗没接着对角走' : '四颗都到位，上下两条缝是匀的',
+              { tone: skipped ? 'stop' : 'go' });
             engine.done();
           },
         });
@@ -269,6 +304,7 @@ export function acts(ctx) {
       parts: ['rear-wheel'],
       cue: '后轮抬进摇臂末端',
       hint: '顺着叉腿往上抬',
+      sound: 'WHEEL_SEAT',
       note: {
         title: '飞轮朝传动侧',
         body: '整轮是成品，飞轮与刹车碟已经在花鼓上。放进去之前先看一眼：'
@@ -282,6 +318,7 @@ export function acts(ctx) {
       parts: ['front-wheel'],
       cue: '前轮抬进叉腿末端的槽',
       hint: '顺着叉腿往上抬，不是横着推',
+      sound: 'WHEEL_SEAT',
       note: {
         title: '碟片要对准卡钳',
         body: '刹车碟得从卡钳的两片来令片之间穿过去。对不准就硬推，会把来令片顶歪。',
@@ -292,7 +329,7 @@ export function acts(ctx) {
       phase: 5,
       title: '桶轴穿进去',
       fastens: ['axle-front'],
-      cam: shot(ctx, ['front-wheel'], { cam: { az: 105, el: 16 }, pad: 0.19 }),
+      cam: frameBolts(ctx, 'axle-front', { az: 105, el: 16 }),
       cue: '绕着轴心画圈，把桶轴拧进去',
       note: {
         title: '桶轴不是快拆',
@@ -353,6 +390,7 @@ export function acts(ctx) {
       parts: ['seatpost'],
       cue: '顺着立管往下压，插过最小插入线',
       hint: '顺着立管的方向压下去',
+      sound: 'POST_SEAT',
       note: {
         title: '最小插入线',
         body: '插浅了，立管口就成了一个杠杆支点，车架会从那一圈裂开。这条线不是建议。',
@@ -422,7 +460,7 @@ export function acts(ctx) {
       phase: 7,
       title: '出门前自检',
       showAll: true,
-      cam: { az: 38, el: 14, target: AIM_BIKE, fit: FIT_BIKE },
+      cam: frameWhole(ctx, { az: 38, el: 14 }),
       cue: '这一遍装到哪儿了，逐条对一下',
       enter(c, engine) { tally(c, engine); },
       exit(c) { c.hud.closeOverlays(); },
@@ -432,7 +470,7 @@ export function acts(ctx) {
       phase: 7,
       title: '可以骑了',
       showAll: true,
-      cam: { az: 90, el: 6, target: AIM_BIKE, fit: FIT_BIKE },
+      cam: frameWhole(ctx, { az: 90, el: 6 }),
       cue: '装完了。骑五十公里回来，把七颗螺丝再过一遍',
     },
   ];
@@ -479,17 +517,39 @@ function tally(c, engine) {
       <b class="tally-val">${r.val}</b>
     </${tag}>`;
   };
-  const col = (n, head) => `<div class="tally-col scroll"><p class="tally-hd">${head}</p>`
-    + rows.map((r, i) => (r.col === n ? cell(r, i) : '')).join('') + '</div>';
+  /*
+   * 每一列的表头带上「几件里好了几件」。三十四行装不进一屏，列是要滚的 ——
+   * 没有这个计数，看见的就只是被切掉上下两头的七八行，读不出全貌。
+   */
+  const col = (n, head) => {
+    const list = rows.filter((r) => r.col === n);
+    const ok = list.filter((r) => r.tone !== 'miss').length;
+    return `<div class="tally-col scroll">
+      <p class="tally-hd">${head}<b>${ok}／${list.length}</b></p>`
+      + rows.map((r, i) => (r.col === n ? cell(r, i) : '')).join('') + '</div>';
+  };
 
   const marks = [];
   if (c.state.wrongThread > 0) marks.push(`左脚踏往拧松的方向转过 ${c.state.wrongThread} 次`);
-  if (c.state.crossOrderOk === false) marks.push('面盖有一颗没按对角顺序上');
+  if (c.state.crossOrderOk === false) marks.push('面盖有一颗不是上一颗的对角');
+  const stripped = Object.keys(c.state.stripped).length;
+  if (stripped) marks.push(`${stripped} 颗拧过头滑丝了`);
+
+  /*
+   * 结语要与上面那几行对得上。早先无论有没有备注，装满了就一律报「全部到位。可以骑了。」
+   * —— 于是「面盖有一颗没按对角顺序上」的正下方紧跟着一句「全部到位」，
+   * 两句话互相拆台，读的人不知道到底该不该骑。
+   */
+  const hint = left > 0
+    ? `还差 ${left} 处。点那一行回到对应的步骤。`
+    : marks.length
+      ? '都装上了。上面这几处值得回头再看一眼。'
+      : '二十七件、七颗，全部到位。可以骑了。';
 
   c.hud.dock({
     body: `<div class="tally">${col(0, '大件')}${col(1, '紧固件')}</div>`
       + (marks.length ? `<p class="tally-mark">${marks.join('；')}</p>` : ''),
-    hint: left === 0 ? '全部到位。可以骑了。' : `还差 ${left} 处 —— 点那一行就回到对应的步骤。`,
+    hint,
     onMount: (root) => {
       root.querySelectorAll('[data-go]').forEach((el) => {
         el.addEventListener('click', () => engine.goToStep(owner.get(rows[+el.dataset.go].id)));
