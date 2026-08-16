@@ -145,9 +145,19 @@ export class Bike {
 
   has(name) { return this.byName.has(name) || this.byName.has(Bike.sanitize(name)); }
 
-  /** 某个子树的世界包围盒 —— 取景与吸附判定都要用 */
+  /**
+   * 某个子树的世界包围盒 —— 取景与吸附判定都要用。
+   *
+   * **先自己刷一遍矩阵。** `Box3.setFromObject()` 内部走的是
+   * `updateWorldMatrix(false, false)`：既不回头刷祖先，也不往下刷子树，
+   * 只把自己那一格算新。而取景是在首帧渲染之前算的，那时谁也没刷过矩阵 ——
+   * 量一个刚被 `slide.park()` 挪过位的**组节点**，子网格拿到的还是父节点的旧矩阵，
+   * 量出来的就是它挪之前在哪儿。
+   */
   boundsOf(name) {
-    return new THREE.Box3().setFromObject(this.get(name));
+    const o = this.get(name);
+    o.updateWorldMatrix(true, true);
+    return new THREE.Box3().setFromObject(o);
   }
 
   /**
