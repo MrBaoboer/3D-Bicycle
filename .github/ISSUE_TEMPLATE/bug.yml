@@ -46,7 +46,7 @@ body:
       label: 在哪儿遇到的
       options:
         - https://3d-bicycle.vercel.app
-        - https://mrbaoboer.github.io/3d-bicycle/
+        - https://mrbaoboer.github.io/3D-Bicycle/
         - 本地 npm run dev
         - 本地 npm run preview
     validations:

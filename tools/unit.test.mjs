@@ -20,7 +20,7 @@ import {
   vecLength, isUnitVector,
   groupBy, topoSort, missingRefs, formatCycle,
   parseSpec, isLeftPedalId, isRightPedalId,
-  torqueProblems, crossGroupProblems,
+  threadProblems, crossGroupProblems,
   runChecks, formatReport,
   INSTALL_KINDS, ORDERS, CROSS_MIN, DEFAULT_MODEL,
 } from './check-manifest.mjs';
@@ -149,22 +149,14 @@ test('左脚踏识别：认 id 里成词的 left/li/l，不误伤 right 与别�
 });
 
 // ── 扭矩三档 ────────────────────────────────────────────
-test('torqueProblems：0 < min < max < strip，任一档不递增就报出期望与实得', () => {
-  const ok = { id: 'a', torque: [5, 6], strip: 9 };
-  assert.deepEqual(torqueProblems([ok]), []);
-  assert.deepEqual(torqueProblems([]), []);
-  // 相等不算递增（贴着上限拧本来就该判不合格）
-  assert.equal(torqueProblems([{ id: 'a', torque: [6, 6], strip: 9 }]).length, 1);
-  assert.equal(torqueProblems([{ id: 'a', torque: [5, 9], strip: 9 }]).length, 1);
-  assert.equal(torqueProblems([{ id: 'a', torque: [0, 6], strip: 9 }]).length, 1);
-  assert.equal(torqueProblems([{ id: 'a', torque: [7, 6], strip: 5 }]).length, 2);
-  assert.match(torqueProblems([{ id: 'stem-1', torque: [5, 6], strip: 4 }])[0], /stem-1.*6 ≮ 4/);
-  // 类型不对时只报一条，不再往下算
-  assert.equal(torqueProblems([{ id: 'a', torque: 5, strip: 9 }]).length, 1);
-  assert.equal(torqueProblems([{ id: 'a', torque: [5, 6] }]).length, 1);
+test('threadProblems：旋合长度 turns × pitch 要在常识范围内', () => {
+  assert.deepEqual(threadProblems([{ id: 'a', turns: 6, pitch: 1.5 }]), []);   // 9 mm
+  assert.deepEqual(threadProblems([]), []);
+  assert.equal(threadProblems([{ id: 'a', turns: 1, pitch: 0.5 }]).length, 1); // 0.5 mm 夹不住
+  assert.equal(threadProblems([{ id: 'a', turns: 40, pitch: 1 }]).length, 1);  // 40 mm 没这么长的孔
+  assert.equal(threadProblems([{ id: 'a' }]).length, 1);
+  assert.match(threadProblems([{ id: 'stem-1', turns: 2, pitch: 0.5 }])[0], /stem-1.*1.00/);
 });
-
-// ── 交叉拧紧 ────────────────────────────────────────────
 test('crossGroupProblems：cross 组必须偶数且不少于 4 颗，同组 order 还得一致', () => {
   const mk = (n, group, order) => Array.from({ length: n }, (_, i) => ({ id: `${group}-${i}`, group, order }));
   assert.equal(CROSS_MIN, 4);
@@ -262,7 +254,7 @@ const NODES = new Map([
 
 const bolt = (id, group, order) => ({
   id, name: `把立面盖螺栓 ${id.at(-1)}`, tool: 'hex-4', thread: 'right',
-  pitch: 0.7, turns: 6, torque: [5, 6], strip: 9,
+  pitch: 0.7, turns: 6,
   axis: [1, 0, 0], point: [0.5, 1, 0], group, order,
 });
 
@@ -301,19 +293,19 @@ const fixture = () => ({
   fasteners: [
     {
       id: 'qr-front', name: '前轮快拆', tool: 'hand', thread: 'right',
-      pitch: 1, turns: 6, torque: [8, 10], strip: 16,
+      pitch: 1, turns: 6,
       axis: [0, 0, 1], point: [0.4, 0.35, 0], group: 'qr', order: 'any',
     },
     bolt('stem-1', 'stem-face', 'cross'), bolt('stem-2', 'stem-face', 'cross'),
     bolt('stem-3', 'stem-face', 'cross'), bolt('stem-4', 'stem-face', 'cross'),
     {
       id: 'pedal-left', name: '左脚踏轴', tool: 'hex-8', thread: 'left',
-      spec: 'M14x1.25', pitch: 1.25, turns: 8, torque: [35, 40], strip: 55,
+      spec: 'M14x1.25', pitch: 1.25, turns: 8,
       axis: [1, 0, 0], point: [-0.17, 0.28, 0.07], group: 'pedal', order: 'any',
     },
     {
       id: 'pedal-right', name: '右脚踏轴', tool: 'hex-8', thread: 'right',
-      spec: 'M14x1.25', pitch: 1.25, turns: 8, torque: [35, 40], strip: 55,
+      spec: 'M14x1.25', pitch: 1.25, turns: 8,
       axis: [1, 0, 0], point: [-0.17, 0.28, -0.07], group: 'pedal', order: 'any',
     },
   ],
@@ -342,7 +334,7 @@ test('每种错法各自触发对应的那一条断言，不会张冠李戴', ()
   assert.deepEqual(only((m) => { m.parts[3].pivot.axis = [1, 1, 0]; }), ['M-04']);
   assert.deepEqual(only((m) => { m.parts[1].needs = ['ghost']; }), ['M-05']);
   assert.deepEqual(only((m) => { m.parts[0].needs = ['front-wheel']; }), ['M-06']);
-  assert.deepEqual(only((m) => { m.fasteners[0].strip = 9; }), ['M-07']);
+  assert.deepEqual(only((m) => { m.fasteners[0].turns = 40; }), ['M-07']);
   assert.deepEqual(only((m) => { m.fasteners[5].thread = 'right'; }), ['M-08']);
   // 面盖螺栓少一颗 —— 4 颗交叉变 3 颗，对角就配不成对了
   assert.deepEqual(only((m) => { m.fasteners.splice(4, 1); m.parts[2].fasten.pop(); }), ['M-09']);

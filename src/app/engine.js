@@ -164,6 +164,8 @@ export class Engine {
       await prev?.exit?.(ctx);
       ctx.slide.cancel();
       ctx.screw.cancel();
+      ctx.pick?.cancel();
+      ctx.hud.tag(null);
       ctx.guides.clear();
       ctx.hud.clearSpots();
       ctx.hud.setNote(null);
@@ -204,6 +206,18 @@ export class Engine {
       }
       if (s.note) ctx.hud.setNote(s.note);
       if (s.enter) await s.enter(ctx, this);
+
+      /*
+       * 指到哪件，报哪件的名字 —— 每一步都挂，除非这一步自己说不要。
+       * 第一步不挂：那一步已经钉了四枚带说明的圆点，再跟一个浮动名字牌
+       * 就是同一处两套注释。
+       */
+      if (!s.noPick && !ctx.pick.session) {
+        ctx.pick.begin({
+          fallback: '车架',
+          onHover: (hit, x, y) => ctx.hud.tag(hit?.name ?? null, x, y),
+        });
+      }
     } catch (e) {
       console.error(`[step ${this.steps[i]?.id}]`, e);
     } finally {

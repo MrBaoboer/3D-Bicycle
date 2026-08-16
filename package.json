@@ -1,5 +1,5 @@
 {
-  "name": "bike-manual",
+  "name": "3d-bicycle",
   "private": true,
   "version": "0.1.0",
   "type": "module",
@@ -35,10 +35,10 @@
   "author": "MrBaoboer",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/MrBaoboer/3d-bicycle.git"
+    "url": "git+https://github.com/MrBaoboer/3D-Bicycle.git"
   },
   "homepage": "https://3d-bicycle.vercel.app",
   "bugs": {
-    "url": "https://github.com/MrBaoboer/3d-bicycle/issues"
+    "url": "https://github.com/MrBaoboer/3D-Bicycle/issues"
   }
 }

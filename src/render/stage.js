@@ -36,15 +36,25 @@ function orbit(target, az, el, dist) {
 const SCENE_SPAN = 1.2;
 
 /**
+ * 屏幕上的动静小于这个数就不动画，直接落位。
+ * 0.06 大致相当于：主体在画面上挪不到百分之三、或者转不到五度、或者缩放不到三个点。
+ * 这个量级的位移看不出来，而为它跑半秒动画只会让人以为「有什么变了」。
+ */
+const TINY = 0.06;
+
+/** 转过这么多度才值得在中段把镜头往外鼓一下；以下的只是多余的呼吸 */
+const BULGE_FROM = 40;
+
+/**
  * 三档画质预算。
  *
  * 这台车有 32 根一根根建出来的辐条、一整条链、几十颗倒角螺丝 ——
  * 高对比细边到处都是，镜头又一直在缓慢环绕，抗锯齿不能省。
  */
 const TIERS = {
-  low: { antialias: true, maxPixelRatio: 1.5, shadow: 0 },
-  mid: { antialias: true, maxPixelRatio: 1.75, shadow: 1024 },
-  high: { antialias: true, maxPixelRatio: 2, shadow: 2048 },
+  low: { antialias: true, maxPixelRatio: 1.5 },
+  mid: { antialias: true, maxPixelRatio: 1.75 },
+  high: { antialias: true, maxPixelRatio: 2 },
 };
 
 /** 按设备能力粗分档：显存与核数都探不到时，宁可给低的 */
@@ -77,8 +87,14 @@ export class Stage {
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 1.0;
-    renderer.shadowMap.enabled = q.shadow > 0;
-    renderer.shadowMap.type = THREE.PCFShadowMap;
+    /*
+     * **不投影。** 这一份要看的是零件与零件怎么接上，而一台自行车投在地上的影子
+     * 是一大片辐条、链条、叉腿交织的噪点，面积常常比主体本身还大 ——
+     * 近景步骤里它就摊在主体旁边，眼睛先被它勾过去。
+     * 去掉之后主体浮在一块干净的台面上，边缘一清二楚。
+     *
+     * 顺带省掉每帧一张 2048² 的阴影贴图与一整趟投影渲染。
+     */
     this.renderer = renderer;
 
     this.scene = new THREE.Scene();
@@ -97,16 +113,6 @@ export class Stage {
     // ── 布光 ──
     this.key = new THREE.DirectionalLight(0xfff4e6, 2.2);
     this.key.position.set(3, 5, 4);
-    this.key.castShadow = q.shadow > 0;
-    if (q.shadow) {
-      this.key.shadow.mapSize.set(q.shadow, q.shadow);
-      this.key.shadow.camera.near = 0.5;
-      this.key.shadow.camera.far = 20;
-      const s = 1.6;
-      Object.assign(this.key.shadow.camera, { left: -s, right: s, top: s, bottom: -s });
-      this.key.shadow.bias = -0.0006;
-      this.key.shadow.normalBias = 0.02;
-    }
     this.scene.add(this.key, this.key.target);
 
     this.fill = new THREE.DirectionalLight(0xcfe0f0, 0.7);
@@ -117,17 +123,14 @@ export class Stage {
     this.rim.position.set(-2, 3, -5);
     this.scene.add(this.rim);
 
-    this.ambient = new THREE.HemisphereLight(0xdfe8f2, 0x3a3630, 0.45);
+    /*
+     * 底光。没有影子之后，向下那一面完全靠它交代形体 ——
+     * 半球光的下半色原本压得很暗（0x3a3630），是为了让影子显得有分量；
+     * 影子不在了，那一档就只剩「底下糊成一团」。抬亮并转冷一点，
+     * 底面的转折才读得出来。
+     */
+    this.ambient = new THREE.HemisphereLight(0xdfe8f2, 0x8a8f96, 0.6);
     this.scene.add(this.ambient);
-
-    // ── 地面：只接影，不抢戏 ──
-    this.ground = new THREE.Mesh(
-      new THREE.PlaneGeometry(40, 40),
-      new THREE.ShadowMaterial({ opacity: 0.22 }),
-    );
-    this.ground.rotation.x = -Math.PI / 2;
-    this.ground.receiveShadow = true;
-    this.scene.add(this.ground);
 
     const controls = new OrbitControls(this.camera, canvas);
     controls.enableDamping = true;
@@ -172,7 +175,7 @@ export class Stage {
     this.renderer.setSize(w, h, false);
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
-    if (this._lastFrame) this.setRecommended(this._lastFrame, { keepUser: true });
+    if (this._lastFrame) this.setRecommended(this._lastFrame, { keepUser: true, layout: true });
   }
 
   /**
@@ -185,7 +188,7 @@ export class Stage {
     this.safe = { top, bottom, left, right };
     // 动手的时候不重新取景：提示文字每换一行安全区就变，机位会一直缓慢地飘
     if (this.held) return;
-    if (this._lastFrame) this.setRecommended(this._lastFrame, { keepUser: true });
+    if (this._lastFrame) this.setRecommended(this._lastFrame, { keepUser: true, layout: true });
   }
 
   /**
@@ -202,7 +205,7 @@ export class Stage {
     /*
      * 下限：界面再厚也不能把主体挤成一枚邮票，但也不能高到装不下。
      * 0.46 这一档是被手机上拧面盖那一步定住的：竖屏 844 px 里，
-     * 顶栏加上螺丝排、扭矩表、旁白与按钮实测占掉 440 px，真正空着的只剩 46%。
+     * 顶栏加上螺丝排、旁白与按钮实测占掉 440 px，真正空着的只剩 46%。
      * 下限给到 0.62 的话，取景按 62% 算距离，主体就一定越过读数的上沿 ——
      * 画面上方空着一大片，而要拧的那几颗压在读数边上。
      */
@@ -242,11 +245,13 @@ export class Stage {
    * @param {{az?:number, el?:number, dist?:number, target?:THREE.Vector3,
    *          ease?:number, fit?:{r:number,h?:number}}} o
    *   fit 声明这一步必须完整看到的范围；装不下就把相机往后拉，只拉远不拉近。
-   * @param {{keepUser?:boolean}} [mode] keepUser：只是拿旧声明重算距离（画幅变了、
-   *   界面高度变了），不能清掉 userTook —— 否则用户刚转到顺手的角度，
+   * @param {{keepUser?:boolean, layout?:boolean}} [mode] keepUser：只是拿旧声明重算距离
+   *   （画幅变了、界面高度变了），不能清掉 userTook —— 否则用户刚转到顺手的角度，
    *   随便哪行提示换个字数，镜头就自己溜回去。
+   *   layout：这一次是界面变了要重新让位，不是换步。走快档、不鼓 —— 它是纠版式，
+   *   不是叙事的一部分，慢悠悠地飘过去反而像画面自己在动。
    */
-  setRecommended(o = {}, { keepUser = false } = {}) {
+  setRecommended(o = {}, { keepUser = false, layout = false } = {}) {
     const { az = 45, el = 18, dist, target = new THREE.Vector3(), ease = 1.0, fit } = o;
     this._lastFrame = { ...o, target };
     const t = target.clone();
@@ -282,7 +287,7 @@ export class Stage {
     if (!keepUser) this.userTook = false;
     this.cameraEase = ease;
     this.key.target.position.copy(t);
-    this.#beginShot(ease);
+    this.#beginShot(ease, { layout });
   }
 
   /** 相机此刻的轨道坐标（相对 controls.target） */
@@ -309,12 +314,22 @@ export class Stage {
    *  · 方位角走**最短的那一边**（归一到 ±180），否则会绕远路转 300°；
    *  · 距离按**几何插值**（等比），不是等差 —— 从 5 m 推到 0.3 m 时等差插值
    *    前半程几乎不动、后半程猛扑；
-   *  · 中段把距离往外鼓一点。转得越多鼓得越高，既避开中途蹭到车身，
-   *    读起来也正是真人换机位的样子：先退开，转过去，再推进。
+   *  · 转得多的时候，中段把距离往外鼓一点：避开中途蹭到车身，
+   *    读起来也正是真人换机位的样子 —— 先退开，转过去，再推进。
    *
-   * 时长按「这一趟有多远」现算：原地微调半秒收，转半圈一秒七。
+   * 时长按「这一趟有多远」现算：小幅调整半秒收，转半圈一秒七。
+   *
+   * **走不动的就别走。** 镜头动是有代价的：读的人会以为「有什么变了」而重新找一遍。
+   * 所以两处克制：
+   *   看不出来的位移直接落位，一帧都不animate（下面的 TINY）；
+   *   界面自己引起的重新取景（说明卡摊开、读数出现、转屏）只用来纠版式，
+   *     不是叙事的一部分 —— 走快档，也不鼓。
+   * 中段外扩同样只留给真的绕过半个车身那几趟，小幅调整时它只是一次多余的呼吸。
+   *
+   * @param {number} ease 步骤声明的时长系数
+   * @param {{layout?:boolean}} [o] layout：这一次只是界面变了要重新让位，不是换步
    */
-  #beginShot(ease = 1) {
+  #beginShot(ease = 1, { layout = false } = {}) {
     const from = this.#poseNow();
     const to = {
       target: this.recommend.target.clone(),
@@ -325,20 +340,48 @@ export class Stage {
     const dAz = wrapDeg(to.az - from.az);
     const dEl = to.el - from.el;
     const zoom = Math.abs(Math.log(Math.max(to.dist, 1e-3) / Math.max(from.dist, 1e-3)));
-    const move = from.target.distanceTo(to.target) / SCENE_SPAN;
-    const effort = Math.abs(dAz) / 180 + Math.abs(dEl) / 60 + zoom / 1.6 + move;
 
-    if (effort < 1e-3) { this.shot = null; return; }
+    /*
+     * 这一趟在**屏幕上**有多大动静。全按世界尺度算是不行的：
+     * 目标点挪 4 cm，在整车照上什么也看不出，在一颗螺栓的近景里却是半个画面。
+     * 折算成「占画面的几成」，判据才在近景与全景上都成立。
+     */
+    const span = 2 * to.dist * Math.tan((this.camera.fov * Math.PI) / 360);
+    const move = from.target.distanceTo(to.target) / Math.max(span, 1e-4);
+    const screen = Math.abs(dAz) / 90 + Math.abs(dEl) / 45 + zoom / 0.5 + move;
+
+    // 看不出来的就直接落位。这一档不是「跳切」—— 按定义它在屏幕上就不可见
+    if (screen < TINY) { this.shot = null; this.snapToRecommended(); return; }
+
+    const effort = Math.abs(dAz) / 180 + Math.abs(dEl) / 60 + zoom / 1.6
+      + from.target.distanceTo(to.target) / SCENE_SPAN;
     // 用户要求减少动效时几乎直接换过去 —— 一秒多的环绕对前庭敏感的人是负担。
     // 但仍留 0.2 秒：硬切一帧就是这一条要避免的「跳」
+    /*
+     * 界面引起的重新取景不能把**正在走的那一趟**掐短。
+     * 动手的那几步会在 enter() 里摆出那一排螺丝，安全区当场变一次，
+     * 于是一趟一秒四的环绕被一次纠版式压成 0.32 秒 —— 落点是对的，
+     * 可那一下看着就是「走到一半突然赶过去」。
+     * 快档只对「原本就没在走」的那一次生效。
+     */
+    const running = this.shot && !this.shot.layout
+      ? Math.max(0, this.shot.dur - this.shot.t)
+      : 0;
     const slow = reducedMotion();
+    const dur = slow ? 0.2
+      : layout ? Math.max(0.32, running)
+        : Math.max(0.45, Math.min(1.7, (0.45 + 0.8 * effort) / (ease || 1)));
     this.shot = {
       from,
       to,
       dAz,
       t: 0,
-      dur: slow ? 0.2 : Math.max(0.45, Math.min(1.7, (0.45 + 0.8 * effort) / (ease || 1))),
-      bulge: slow ? 0 : Math.min(0.34, 0.3 * effort),
+      dur,
+      layout,
+      // 只有真的要绕过去时才鼓。BULGE_FROM 以下这一下只是多余的呼吸
+      bulge: slow || layout || Math.abs(dAz) < BULGE_FROM
+        ? 0
+        : Math.min(0.3, 0.3 * (Math.abs(dAz) - BULGE_FROM) / (180 - BULGE_FROM)),
     };
   }
 
@@ -353,7 +396,7 @@ export class Stage {
    * 动手的步骤里连「界面高度变了重新取景」也冻住 —— 手上对位时画面不能自己飘。
    * 引擎每翻一步解开一次。
    *
-   * **但要晚冻两帧。** 扭矩表与那一排螺丝是这一步 `enter()` 里才摆出来的，
+   * **但要晚冻两帧。** 那一排螺丝是这一步 `enter()` 里才摆出来的，
    * 它们占掉底下一大条；而 hold 是同一个 enter 里同步调的，
    * 立刻冻上就意味着这一条永远算不进取景 —— 实测手机上拧面盖那一步，
    * 主体被压在读数上沿的一线，上面空着大半屏。ResizeObserver 下一帧才回调，
@@ -428,8 +471,8 @@ export class Stage {
   setTheme(theme) {
     const dark = theme === 'dark';
     this.scene.background = new THREE.Color(dark ? 0x14161a : 0xeceef2);
-    this.ground.material.opacity = dark ? 0.35 : 0.22;
-    this.ambient.intensity = dark ? 0.28 : 0.45;
+    // 深色下底光要收，不然黑车身在深底上没有轮廓；浅色下要给足，那是唯一的底面照明
+    this.ambient.intensity = dark ? 0.34 : 0.6;
     this.scene.environmentIntensity = dark ? 0.7 : 1.0;
   }
 

@@ -93,13 +93,11 @@ try {
   await shot(page, '03-pivot');
 
   /*
-   * 04 四颗面盖螺丝：两颗到位、第三颗正好走进绿区的那一刻。
+   * 04 四颗面盖螺丝：一对对角已经拧上，第三颗正拧到一半。
    *
-   * 不能靠「跑起来再等几秒」撞这一帧 —— 扭矩落在绿区只有一两百毫秒，
-   * 而截图本身就要一百毫秒，十次有九次拍到的是两次拧紧之间那个 0.0。
-   * 所以头两颗照常自动拧完，第三颗直接按扭矩曲线反解出角度、一次转到位：
-   * nm = strip · load^2.6，load = (progress − 旋到底的角度) / 加载行程。
-   * 拍出来的这一帧是算准的，不是撞上的。
+   * 不能靠「跑起来再等几秒」撞这一帧 —— 自动拧一颗只要一秒出头，
+   * 而截图本身就要一百毫秒。所以头两颗照常自动拧完，
+   * 第三颗直接转到旋合行程的六成、停在那儿：拍出来的是算准的，不是撞上的。
    */
   await at(page, 'D2', { finish: false });
   await page.evaluate(async () => {
@@ -107,10 +105,8 @@ try {
     await c.screw.autoRun('stem-face-a');
     await c.screw.autoRun('stem-face-b');
     const f = c.bom.fastener('stem-face-c');
-    const TAU = Math.PI * 2;
-    const load = Math.pow(5.4 / f.strip, 1 / 2.6);      // 目标区间 5–6 N·m，取 5.4
     c.screw._use('stem-face-c');
-    c.screw._turn(f.turns * TAU + 1.25 * TAU * load);
+    c.screw._turn(f.turns * Math.PI * 2 * 0.6);
   });
   await page.waitForTimeout(700);
   await shot(page, '04-cross-tighten');

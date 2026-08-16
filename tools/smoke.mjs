@@ -168,13 +168,13 @@ async function run(viewport, label, port) {
         await window.__ctx.screw.autoRun();
         await new Promise((r) => setTimeout(r, 1200));
         const st = window.__ctx.state;
-        return { ok: list.every((id) => typeof st.fastened[id] === 'number'), got: st.fastened };
+        return { ok: list.every((id) => st.fastened[id] === true), got: st.fastened };
       } catch (e) { return { ok: false, err: String(e) }; }
     }, [ids]);
   };
   for (const [step, ids, name] of [
-    ['F3', ['axle-front'], '桶轴上扭矩'],
-    ['D2', ['stem-face-a', 'stem-face-b', 'stem-face-c', 'stem-face-d'], '面盖四颗按对角上扭矩'],
+    ['F3', ['axle-front'], '桶轴拧到底'],
+    ['D2', ['stem-face-a', 'stem-face-b', 'stem-face-c', 'stem-face-d'], '面盖四颗按对角拧到底'],
     ['H2', ['pedal-right-spindle'], '右脚踏正牙旋入'],
     ['H3', ['pedal-left-spindle'], '左脚踏反牙旋入'],
   ]) {
@@ -312,7 +312,7 @@ async function run(viewport, label, port) {
   // 而所有断言照样通过：摊是摊开了，看还是看不见。
   //
   // 判据取像素：整幅渲染两次（有这一件 / 没这一件），差出来的就是它露在最前面的部分。
-  // 影子要先关掉 —— 换一个投影件会让整张阴影贴图重采样，逐像素差里混进一大片噪点。
+  // （这一份不投影，所以逐像素差里没有阴影贴图重采样的噪点，见 render/stage.js。）
   const seen = await page.evaluate(async () => {
     const c = window.__ctx, e = window.__engine;
     await e.goToStep('A2');
@@ -322,10 +322,6 @@ async function run(viewport, label, port) {
     }
     await new Promise((r) => setTimeout(r, 400));
     const s = c.stage;
-    const shadowWas = s.renderer.shadowMap.enabled;
-    const groundWas = s.ground.visible;
-    s.renderer.shadowMap.enabled = false;
-    s.ground.visible = false;
     const N = 480;
     const h = Math.max(1, Math.round((N * innerHeight) / innerWidth));
     const cv = document.createElement('canvas');
@@ -351,8 +347,6 @@ async function run(viewport, label, port) {
       }
       out.push({ name: p.name, front });
     }
-    s.renderer.shadowMap.enabled = shadowWas;
-    s.ground.visible = groundWas;
     out.sort((a, b) => a.front - b.front);
     return out;
   });
@@ -370,12 +364,8 @@ async function run(viewport, label, port) {
   // 早先它们用一对手写的取景常量，把整车半高报小了一成多 ——
   // 于是打开页面第一眼，后轮下缘就被切掉九十来像素，而全部断言照样通过。
   // 判据取渲染结果：把画布缩样读回来，非背景像素的外接框不许贴到画幅四边。
-  // 量之前先把地面收掉 —— 这一条要判的是「车有没有被切掉」，
-  // 而影子铺得比车宽得多（摊开那一步尤其），把它算进去等于在判影子。
   const whole = await page.evaluate(async () => {
     const c = window.__ctx, e = window.__engine;
-    const groundWas = c.stage.ground.visible;
-    c.stage.ground.visible = false;
     const out = [];
     for (let i = 0; i < e.steps.length; i++) {
       if (!e.steps[i].showAll) continue;
@@ -405,7 +395,6 @@ async function run(viewport, label, port) {
       }
       out.push({ id: e.steps[i].id, x0, y0, x1: N - 1 - x1, y1: h - 1 - y1, N, h });
     }
-    c.stage.ground.visible = groundWas;
     return out;
   });
   // 缩样一格约等于画幅的 1/160，留一格容差
@@ -413,6 +402,64 @@ async function run(viewport, label, port) {
   check(`${label}-整车`, '整车那四张（成品照、爆炸图、自检、收尾）完整落在画幅内',
     whole.length === 4 && cut.length === 0,
     cut.length ? cut.map((w) => `${w.id} 贴边`).join('、') : `${whole.length} 张`);
+
+  // ── 摊开那一步：指到哪件，报哪件的名字 ──
+  //
+  // 摊开只回答了「有多少」。指哪儿说哪儿，才回答得了「都是些什么」。
+  // 取样点用每件自己那几块网格的投影中心 —— 不是包围盒中心：
+  // 油管、座管这类件的节点原点离它的几何有一米远，拿盒中心去指会指到空处。
+  const spots = await page.evaluate(async () => {
+    const c = window.__ctx, e = window.__engine, s = c.stage;
+    await e.goToStep('A2');
+    for (let k = 0; k < 300; k++) {
+      if (!s.shot && !e.busy) break;
+      await new Promise((r) => setTimeout(r, 25));
+    }
+    await new Promise((r) => setTimeout(r, 400));
+    const cam = s.camera;
+    cam.updateMatrixWorld(true);
+    const out = [];
+    for (const p of c.bom.parts) {
+      let sx = 0, sy = 0, n = 0;
+      for (const nm of c.bom.nodesOf(p.id)) {
+        c.bike.get(nm).traverse((o) => {
+          if (!o.isMesh || !o.geometry) return;
+          if (!o.geometry.boundingSphere) o.geometry.computeBoundingSphere();
+          const v = o.geometry.boundingSphere.center.clone().applyMatrix4(o.matrixWorld).project(cam);
+          sx += (v.x * 0.5 + 0.5) * innerWidth;
+          sy += (0.5 - v.y * 0.5) * innerHeight;
+          n += 1;
+        });
+      }
+      if (n) out.push({ name: p.name, x: Math.round(sx / n), y: Math.round(sy / n) });
+    }
+    return out;
+  });
+  let named = 0;
+  const wrong = [];
+  for (const sp of spots) {
+    if (sp.x < 2 || sp.x > viewport.width - 2 || sp.y < 2 || sp.y > viewport.height - 2) continue;
+    await page.mouse.move(sp.x, sp.y);
+    await page.waitForTimeout(tmo(60));
+    const got = await page.evaluate(() => {
+      const el = document.querySelector('.tag');
+      return el.hidden ? null : el.textContent;
+    });
+    if (!got) continue;
+    named += 1;
+    // 报出来的必须是清单里真有的名字（指到别的件上也算对：那一像素本来就是那件在前面）
+    const real = await page.evaluate((t) => window.__ctx.bom.parts.some((p) => p.name === t), got);
+    if (!real) wrong.push(`${sp.name}→${got}`);
+  }
+  const cleared = await page.evaluate(async () => {
+    await window.__engine.next();
+    await new Promise((r) => setTimeout(r, 600));
+    return document.querySelector('.tag').hidden;
+  });
+  check(`${label}-认件`, '摊开那一步指到哪件报哪件的名字，翻页就收起',
+    named >= 16 && wrong.length === 0 && cleared,
+    wrong.length ? `报了清单里没有的名字：${wrong.join('、')}`
+      : `${named} / ${spots.length} 处报出名字 · 翻页后${cleared ? '已收起' : '还挂着'}`);
 
   // ── 运镜：不许跳切，而且要绕过去不是穿过去 ──
   //
@@ -422,9 +469,11 @@ async function run(viewport, label, port) {
   // 两条判据：
   //   排了一趟   每次换步都得排出一段有时长的运镜（除非两步机位本来就一样），
   //              而不是把相机瞬间摆过去；
-  //   走的是弧   转过六十度以上的那几趟，实际走过的路程必须长于两点间直线 ——
-  //              世界坐标直线插值转半圈时相机是笔直穿过整台车的，
-  //              路程恰好等于直线，这一条抓的就是它。
+  //   走的是弧   全程离主体最近时，不许比两头那个较近的距离还近。
+  //              绕着转过去的话这个比值恒在 1.0 往上（中段还会往外鼓一点）；
+  //              世界坐标直线插值转半圈时相机笔直穿过整台车，它会掉到零附近。
+  //              **判距离而不是判路程**：路程要逐帧累加，帧率一低就把弧量成了直线
+  //              （实测线上跑出过 1.02，紧贴阈值），而距离只要采到中段就一定露馅。
   // 外加：每一趟都要**分毫不差地落在**这一步该在的机位上，否则「最佳姿态」是空话。
   const flight = await page.evaluate(async () => {
     const c = window.__ctx, e = window.__engine, s = c.stage;
@@ -438,19 +487,18 @@ async function run(viewport, label, port) {
      * 看着就像跳切，其实是量晚了。
      */
     const hop = async (i) => {
-      let path = 0;
       let dur = 0;
-      let last = s.camera.position.clone();
       let stop = false;
+      const d0 = s.camera.position.distanceTo(s.controls.target);
+      const from = s.camera.position.clone();
+      let minR = d0;
       const tick = () => {
         if (stop) return;
         if (s.shot) dur = Math.max(dur, s.shot.dur);
-        path += last.distanceTo(s.camera.position);
-        last = s.camera.position.clone();
+        minR = Math.min(minR, s.camera.position.distanceTo(s.controls.target));
         requestAnimationFrame(tick);
       };
       requestAnimationFrame(tick);
-      const from = s.camera.position.clone();
       await e.go(i);
       for (let k = 0; k < 300; k++) {
         if (!s.shot && !e.busy) break;
@@ -458,10 +506,13 @@ async function run(viewport, label, port) {
       }
       await new Promise((r) => setTimeout(r, 120));
       stop = true;
-      path += last.distanceTo(s.camera.position);
+      const d1 = s.camera.position.distanceTo(s.controls.target);
       return {
-        id: e.steps[i].id, dur, path,
-        straight: from.distanceTo(s.camera.position),
+        id: e.steps[i].id,
+        dur,
+        moved: from.distanceTo(s.camera.position),
+        // 全程离主体最近时还剩两头那个较近值的几成 —— 绕过去是 1.0 往上，穿过去会掉到零附近
+        clear: minR / Math.max(1e-6, Math.min(d0, d1)),
         land: s.camera.position.distanceTo(s.recommend.pos),
       };
     };
@@ -481,18 +532,25 @@ async function run(viewport, label, port) {
     }
     return out;
   });
-  const jumped = flight.filter((f) => f.dur < 0.4);
+  /*
+   * 「跳切」的定义：镜头**明显挪了位置，却没有排运镜**。
+   * 挪得看不出来的那几趟是故意不动画的 —— 为一次不可见的位移跑半秒动画，
+   * 只会让人以为「有什么变了」而重新找一遍画面。见 stage.js 的 TINY。
+   */
+  const jumped = flight.filter((f) => f.dur < 0.3 && f.moved > 0.05);
   const missed = flight.filter((f) => f.land > 0.01);
-  const chord = flight.filter((f) => f.turn > 60 && f.path <= f.straight * 1.02);
+  const chord = flight.filter((f) => f.turn > 60 && f.clear < 0.9);
   check(`${label}-运镜`, '换步一律走一段运镜，转得多时绕过去，且分毫不差地落在该到的机位上',
     flight.length === (total - 1) * 2 && jumped.length === 0
       && missed.length === 0 && chord.length === 0,
     [
-      jumped.length ? `跳切 ${jumped.map((f) => `${f.id}(${f.dur.toFixed(2)}s)`).join('、')}` : '',
+      jumped.length ? `跳切 ${jumped.map((f) => `${f.id}(挪了${f.moved.toFixed(2)}m 却没排运镜)`).join('、')}` : '',
       missed.length ? `没落到位 ${missed.map((f) => `${f.id}(${f.land.toFixed(3)}m)`).join('、')}` : '',
-      chord.length ? `走的是弦 ${chord.map((f) => `${f.id}(${Math.round(f.turn)}°)`).join('、')}` : '',
+      chord.length ? `穿过去了 ${chord.map((f) => `${f.id}(离主体剩 ${f.clear.toFixed(2)})`).join('、')}` : '',
     ].filter(Boolean).join(' · ')
-      || `${flight.length} 趟 · 最长 ${Math.max(...flight.map((f) => f.dur)).toFixed(2)}s`);
+      || `${flight.length} 趟（其中 ${flight.filter((f) => f.dur === 0).length} 趟原地不动）`
+        + ` · 最长 ${Math.max(...flight.map((f) => f.dur)).toFixed(2)}s`
+        + ` · 大转弯离主体最近 ${Math.min(...flight.filter((f) => f.turn > 60).map((f) => f.clear)).toFixed(2)}`);
 
   // ── 主题 ──
   const theme = await page.evaluate(async () => {

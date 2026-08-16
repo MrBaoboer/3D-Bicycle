@@ -7,7 +7,7 @@
  *
  * 文案只留三处：步名（顶栏）、一句旁白（底部）、以及少数几张「为什么」卡片。
  * 其余交给动画 —— 这一份要让人**看懂**，不是让人读懂。
- * 所以卡片只出现在「物理原因看不见」的地方：反牙、扭矩、对角、最小插入线。
+ * 所以卡片只出现在「物理原因看不见」的地方：反牙、对角、最小插入线。
  *
  * 每一步是一份声明加两个钩子，形状见 docs/CONTRACT.md。
  * 取景一律由 shot() 从几何现算，不写常量。
@@ -15,9 +15,8 @@
 
 import {
   V, shot, frameWhole, frameBolts, burstOffset, burstReset, BURST_VIEW,
-  installPart, partCenter, torqueRow, toolList, fasten, fastenGroup,
+  installPart, partCenter, toolRow, fasten, fastenGroup,
 } from './util.js';
-import { torqueText } from '../core/state.js';
 import { tween, Ease } from '../util/tween.js';
 
 /** 顶部章节名，按 phase 取。**这是唯一一份** —— 界面层不再自带一套 */
@@ -36,7 +35,7 @@ const BURST_STAGGER = 0.6;
 const clamp01 = (x) => Math.max(0, Math.min(1, x));
 
 /** 推入一件的标准步骤：取景现算、亮起、拖到位 */
-const push = (ctx, { id, phase, title, cue, parts, hint, note, dir, cam, pad, sound, near }) => ({
+const push = (ctx, { id, phase, title, cue, parts, hint, note, dir, cam, pad, sound, glow, near }) => ({
   id,
   phase,
   title,
@@ -45,7 +44,7 @@ const push = (ctx, { id, phase, title, cue, parts, hint, note, dir, cam, pad, so
   cue,
   note,
   enter(c, engine) {
-    installPart(c, parts, { hint, sound, onDone: () => engine.done() });
+    installPart(c, parts, { hint, sound, glow, onDone: () => engine.done() });
   },
   exit(c) { c.slide.cancel(); for (const p of parts) c.slide.park(p, 1); },
 });
@@ -71,6 +70,8 @@ export function acts(ctx) {
       phase: 0,
       title: '装完是这样',
       showAll: true,
+      // 这一步已经钉了四枚带说明的圆点，不再挂跟随指针的名字牌 —— 同一处两套注释
+      noPick: true,
       /*
        * 整车这几张也从几何现量。手写的那一对常量把整车半高报小了一成多，
        * 于是首屏第一眼的成品照下缘就切掉一截后轮。
@@ -121,8 +122,12 @@ export function acts(ctx) {
        * （二十七件、七颗），只有「工具」一行是新的 —— 而它在宽屏上占掉右边
        * 三百三十二像素，正好是这一步唯一要做的事：把二十七件摊开给人看。
        * 一行旁白说得完的事，不值得用四分之一个画幅去说第二遍。
+       *
+       * 工具改在各自那一步的说明卡上讲 —— 拧到哪一颗，就说该拿哪一把，
+       * 那才是用得上它的时刻。
        */
-      cue: `${ctx.bom.counts.parts} 个大件、${ctx.bom.counts.fasteners} 颗要上扭矩的螺丝 · 工具 ${toolList(ctx)}`,
+      cue: `${ctx.bom.counts.parts} 个大件、${ctx.bom.counts.fasteners} 颗螺丝 · `
+        + `${matchMedia('(pointer: coarse)').matches ? '点一下' : '指向'}任一件，看它叫什么`,
       async enter(c, engine) {
         // 每一件的出场时刻：装得越晚，飞得越早。没人装的（车架这类底座）当第 0 步
         const last = engine.steps.length - 1;
@@ -138,6 +143,7 @@ export function acts(ctx) {
             c.slide.burst(p.id, burstOffset(c, p.id, Ease.outCubic(clamp01(k))));
           }
         }, { ease: Ease.linear });
+
       },
       exit(c) { burstReset(c); },
     },
@@ -241,7 +247,7 @@ export function acts(ctx) {
       cue: '按对角顺序拧，四颗分两轮',
       note: {
         title: '为什么必须对角',
-        spec: [['工具', '4 mm 内六角'], torqueRow(ctx.bom.fastener('stem-face-a'))],
+        spec: [toolRow(ctx.bom.fastener('stem-face-a'))],
         body: '一颗拧死再拧下一颗，面盖会被拽歪，上下两条缝一宽一窄 —— '
           + '受力全压在窄的那边，碳纤维车把从那儿裂。',
       },
@@ -249,7 +255,7 @@ export function acts(ctx) {
         const paint = () => c.hud.setBoltRow(c.bom.groupOf('stem-face').map((f) => ({
           id: f.id,
           name: f.name,
-          state: c.state.stripped[f.id] ? 'stripped' : c.state.fastened[f.id] ? 'tight' : 'pending',
+          state: c.state.fastened[f.id] ? 'tight' : 'pending',
         })));
         paint();
         fastenGroup(c, 'stem-face', {
@@ -265,7 +271,7 @@ export function acts(ctx) {
           },
         });
       },
-      exit(c) { c.screw.cancel(); c.hud.setBoltRow(null); c.hud.setTorqueGauge(null); },
+      exit(c) { c.screw.cancel(); c.hud.setBoltRow(null); },
     },
     P({
       id: 'D3',
@@ -350,17 +356,16 @@ export function acts(ctx) {
       cue: '绕着轴心画圈，把桶轴拧进去',
       note: {
         title: '桶轴不是快拆',
-        spec: [['规格', 'Boost 15 × 110 mm'], torqueRow(ctx.bom.fastener('axle-front'))],
-        body: '它是一根穿过花鼓、拧进对面叉腿的螺杆。拧到规定扭矩就停 —— '
+        spec: [['规格', 'Boost 15 × 110 mm'], toolRow(ctx.bom.fastener('axle-front'))],
+        body: '它是一根穿过花鼓、拧进对面叉腿的螺杆，拧到底就把整只轮子夹住了 —— '
           + '作用是夹紧，不是越紧越安全。',
       },
       enter(c, engine) {
         fasten(c, 'axle-front', {
-          onTight: (nm) => { c.hud.toast(`${torqueText(nm)}，到了`, { tone: 'go' }); engine.done(); },
-          onStrip: () => c.hud.toast('拧过头了 —— 叉腿的螺纹是铝的，滑丝就得换叉腿', { tone: 'stop' }),
+          onTight: () => { c.hud.toast('桶轴到底了', { tone: 'go' }); engine.done(); },
         });
       },
-      exit(c) { c.screw.cancel(); c.hud.setTorqueGauge(null); },
+      exit(c) { c.screw.cancel(); },
     },
 
     // ══════════════ 刹车 ══════════════
@@ -385,6 +390,13 @@ export function acts(ctx) {
       parts: ['hoses'],
       cue: '两根油管从刹把一路走到卡钳',
       pad: 1.05,
+      /*
+       * 亮度调高到别处的四倍多。这一步的取景是整个前端（油管本来就横跨大半台车），
+       * 而油管是两根细黑管子贴在黑碳纤维车架上 —— 别处那 0.1 的自发光在这个画幅上
+       * 等于没亮，实测动手前后只有千分之一的像素变了，看着就像这一步什么也没发生。
+       * 亮成两条橙线，「从刹把一路走到卡钳」才真的看得见走到哪儿。
+       */
+      glow: 0.45,
     }),
     P({
       id: 'G4',
@@ -423,7 +435,7 @@ export function acts(ctx) {
       cue: '朝车头方向拧 —— 右边是正牙',
       note: {
         title: '两边都是「朝车头拧紧」',
-        spec: [['工具', '15 mm 扳手'], torqueRow(ctx.bom.fastener('pedal-right-spindle'))],
+        spec: [toolRow(ctx.bom.fastener('pedal-right-spindle'))],
         body: '记不住哪边反牙没关系：<em>站在那一侧，把扳手朝车头方向压，就是拧紧。</em>',
       },
       enter(c, engine) {
@@ -431,15 +443,15 @@ export function acts(ctx) {
         fasten(c, 'pedal-right-spindle', {
           // 脚踏轴不是一颗独立的螺栓 —— 它就长在脚踏上，所以整只脚踏跟着旋进去
           onProgress: (p) => c.slide.park('pedal-right', p.depth),
-          onTight: (nm) => {
+          onTight: () => {
             c.slide.park('pedal-right', 1);
             c.state.installed = { ...c.state.installed, 'pedal-right': true };
-            c.hud.toast(`${torqueText(nm)}，右边好了`, { tone: 'go' });
+            c.hud.toast('右边拧到底了', { tone: 'go' });
             engine.done();
           },
         });
       },
-      exit(c) { c.screw.cancel(); c.hud.setTorqueGauge(null); c.slide.park('pedal-right', 1); },
+      exit(c) { c.screw.cancel(); c.slide.park('pedal-right', 1); },
     },
     {
       id: 'H3',
@@ -454,7 +466,7 @@ export function acts(ctx) {
       cue: '照样朝车头方向拧 —— 但这边的牙是反的',
       note: {
         title: '为什么偏偏左边是反的',
-        spec: [['牙向', '左旋'], torqueRow(ctx.bom.fastener('pedal-left-spindle'))],
+        spec: [['牙向', '左旋'], toolRow(ctx.bom.fastener('pedal-left-spindle'))],
         body: '踩踏时脚踏轴在曲柄孔里滚，滚的方向恰好把正牙越拧越松。'
           + '左边做成反牙，「越骑越松」就变成了「越骑越紧」。',
       },
@@ -465,15 +477,15 @@ export function acts(ctx) {
           onWrongWay: () => {
             c.hud.toast('这边转不进去 —— 左脚踏是反牙，往反方向转才是拧紧', { tone: 'stop' });
           },
-          onTight: (nm) => {
+          onTight: () => {
             c.slide.park('pedal-left', 1);
             c.state.installed = { ...c.state.installed, 'pedal-left': true };
-            c.hud.toast(`${torqueText(nm)}，两边都好了`, { tone: 'go' });
+            c.hud.toast('两边都拧上了', { tone: 'go' });
             engine.done();
           },
         });
       },
-      exit(c) { c.screw.cancel(); c.hud.setTorqueGauge(null); c.slide.park('pedal-left', 1); },
+      exit(c) { c.screw.cancel(); c.slide.park('pedal-left', 1); },
     },
     {
       id: 'H4',
@@ -519,15 +531,14 @@ function tally(c, engine) {
     rows.push({ col: 0, id: p.id, name: p.name, tone: on ? 'ok' : 'miss', val: on ? '装上了' : '还没装' });
   }
   for (const f of c.bom.fasteners) {
-    const nm = c.state.fastened[f.id];
-    const bad = c.state.stripped[f.id];
-    if (nm === undefined) left += 1;
+    const on = !!c.state.fastened[f.id];
+    if (!on) left += 1;
     rows.push({
       col: 1,
       id: f.id,
       name: f.name,
-      tone: bad ? 'bad' : nm !== undefined ? 'ok' : 'miss',
-      val: bad ? '滑丝' : nm !== undefined ? torqueText(nm) : '没拧',
+      tone: on ? 'ok' : 'miss',
+      val: on ? '拧上了' : '没拧',
     });
   }
 
@@ -554,8 +565,6 @@ function tally(c, engine) {
   const marks = [];
   if (c.state.wrongThread > 0) marks.push(`左脚踏往拧松的方向转过 ${c.state.wrongThread} 次`);
   if (c.state.crossOrderOk === false) marks.push('面盖有一颗不是上一颗的对角');
-  const stripped = Object.keys(c.state.stripped).length;
-  if (stripped) marks.push(`${stripped} 颗拧过头滑丝了`);
 
   /*
    * 结语要与上面那几行对得上。早先无论有没有备注，装满了就一律报「全部到位。可以骑了。」

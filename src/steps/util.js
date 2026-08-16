@@ -25,9 +25,12 @@ const MIN_SPAN = 0.26;
 
 /**
  * 近景往车身那一侧偏多少，以取景半跨度的比例计。
- * 0.35 之内主体仍然稳稳落在画面中段，而原本空着的那半边被车身填上。
+ *
+ * 0.18 ≈ 主体中心离画幅中心不超过画面的 9%，仍在黄金分割那一档之内 ——
+ * 这一步要看的那件东西必须落在舞台中央附近，为了填空把它推到三分之一线外
+ * 就本末倒置了。原来给到 0.35，实测主体最多偏出画面的 17%，看着已经不像「对着它」。
  */
-const CTX_BIAS = 0.35;
+const CTX_BIAS = 0.18;
 
 /**
  * 一件在世界里的形心。三维标注要钉在件身上，而件由一到五个节点组成。
@@ -162,12 +165,25 @@ function meshBoxes(ctx, { skipParts = false } = {}) {
 /** 一个节点子树下每张网格各一个世界包围盒 */
 function nodeBoxes(ctx, name) {
   const root = ctx.bike.get(name);
-  root.updateMatrixWorld(true);
   const out = [];
+  /*
+   * 逐网格一个盒，而且**必须走 setFromObject**。
+   *
+   * 手写 `geometry.boundingBox.applyMatrix4(o.matrixWorld)` 看着等价，实际不是：
+   * 它要求 matrixWorld 已经是新的，而 `Object3D.updateMatrixWorld()` 只往下走，
+   * **不回头更新祖先**。这一段跑在首帧渲染之前，前面的步骤又刚把摇臂、曲柄、
+   * 轮组挪过位，挂在它们底下的件拿到的祖先矩阵是旧的。
+   *
+   * 后果不是差一点点：油管那四段的节点原点离它自己的几何有一米远
+   * （GLB 里几何是带偏移的），矩阵一旧，量出来的盒就退化到原点那一带 ——
+   * 「接上油管」于是把镜头对准了两个轮胎的下沿，油管一根都不在画面里，
+   * 前后两帧一模一样，看着就像这一步什么也没发生。
+   *
+   * setFromObject 内部走的是 updateWorldMatrix(true, …)，祖先一并刷新。
+   */
   root.traverse((o) => {
     if (!o.isMesh || !o.geometry) return;
-    if (!o.geometry.boundingBox) o.geometry.computeBoundingBox();
-    out.push(new Box3().copy(o.geometry.boundingBox).applyMatrix4(o.matrixWorld));
+    out.push(new Box3().setFromObject(o));
   });
   return out.length ? out : [ctx.bike.boundsOf(name)];
 }
@@ -375,10 +391,18 @@ export function frameWhole(ctx, { burst = false, bare = false, pad, az = 38, el 
   if (burst) burstAll(ctx, 1);
   const boxes = meshBoxes(ctx, { skipParts: bare });
   if (burst) burstReset(ctx);
-  // 摊开那一张多留一点余量：二十七件散在画幅四角，贴边的那几件正是最小的那几件，
-  // 切掉一点就等于少了一件，而这一步的全部意思就是「数得出有多少件」。
-  // 只多给半成 —— 余量每多一成，每一件就小一成，而小件本来就只有十几个像素
-  pad ??= burst ? 1.07 : 1.03;
+  /*
+   * 摊开那一张多留一点余量：二十七件散在画幅四角，贴边的那几件正是最小的那几件，
+   * 切掉一点就等于少了一件，而这一步的全部意思就是「数得出有多少件」。
+   *
+   * 整车那几张反过来要收紧。取消投影之后地上那一大片影子没有了，
+   * 而它原本正好占着车底下那一块 —— 现在同样的余量读起来就是「车缩在中间一小团」。
+   * 实测成品照竖向只占到可用画面的 0.71，收到 0.96 之后是 0.76，收尾那张 0.78，
+   * 光车架那张 0.87。再往下收，出门前自检那张会顶进底下那块清单里
+   * （它的可用画面被清单占掉一截，同样的余量在它身上更紧）。
+   * 收得动的底气来自冒烟里那一条：整车四张必须完整落在画幅内，过紧当场报错。
+   */
+  pad ??= burst ? 1.07 : 0.96;
   // 整车这一档只补三分之一的半深，理由见 aimAt 的 depth
   return aimAt(boxes, { az, el, pad, depth: 0.34 });
 }
@@ -419,16 +443,17 @@ export function shot(ctx, parts, o = {}) {
  * 一旦在里面等用户动手，engine.busy 就永远不落 —— 翻页、冒烟、自动路径全部卡死。
  * 到位之后要做什么，走 onDone 回调。
  */
-export function installPart(ctx, partId, { onDone, hint, sound } = {}) {
+export function installPart(ctx, partId, { onDone, hint, sound, glow = 0.1 } = {}) {
   const ids = Array.isArray(partId) ? partId : [partId];
   for (const id of ids) {
     ctx.slide.park(id, 0);
-    ctx.bike.highlight(ctx.bom.nodesOf(id), 0xd8642a, 0.1);
+    ctx.bike.highlight(ctx.bom.nodesOf(id), 0xd8642a, glow);
   }
   ctx.slide.begin({
     partId: ids,
     wrongHint: hint,
     sound,
+    glow,
     onAll: () => {
       for (const id of ids) ctx.bike.highlight(ctx.bom.nodesOf(id), 0xd8642a, 0);
       onDone?.();
@@ -438,69 +463,47 @@ export function installPart(ctx, partId, { onDone, hint, sound } = {}) {
 
 // ══════════════ 拧紧 ══════════════
 
-/** 扭矩行：把区间写清 */
-export const torqueRow = (f) => ['扭矩', `${f.torque[0]}–${f.torque[1]} N·m`];
+/** 工具行：拧这一颗该拿哪一把 */
+export const toolRow = (f) => ['工具', TOOL_NAME[f.tool] ?? f.tool];
 
-/** 工具代号 → 人话。内六角合并成一条，见 toolList */
+/** 工具代号 → 人话 */
 const TOOL_NAME = {
+  'hex-4': '4 mm 内六角',
+  'hex-5': '5 mm 内六角',
+  'hex-6': '6 mm 内六角',
   'wrench-15': '15 mm 扳手',
-  torque: '扭力扳手',
 };
 
-/**
- * 这一遍真正会用到的工具，从清单现数。
- * 手写过一版「4 / 5 / 6 mm 内六角」—— 而这台车一处也没用到 5 mm。
- *
- * 内六角按尺寸并成一条（「4 / 6 mm 内六角」）。逐把列出来是
- * 「4 mm 内六角、6 mm 内六角、15 mm 脚踏扳手」十八个字，
- * 挂在旁白上要折两行 —— 而这一步的旁白只该占一行。
+/*
+ * 这里曾经有个 toolList()，把全车用到的扳手汇成一行挂在「拆开看看」的旁白上。
+ * 撤掉了：那一行占着开场唯一一句旁白的位置，而「该拿哪一把」在开场是没用的信息 ——
+ * 真正用得上它的时刻是拧到某一颗的那一下，那时各自的说明卡会说。
  */
-export function toolList(ctx) {
-  const used = [...new Set(ctx.bom.fasteners.map((f) => f.tool))];
-  const hex = used.filter((k) => k.startsWith('hex-'))
-    .map((k) => +k.slice(4)).sort((a, b) => a - b);
-  const rest = used.filter((k) => !k.startsWith('hex-')).map((k) => TOOL_NAME[k] ?? k);
-  return [...(hex.length ? [`${hex.join(' / ')} mm 内六角`] : []), ...rest].join('、');
-}
 
 /**
- * 拧紧一颗的标准铺陈：摆出扭矩表、开会话、把「帮我拧上」挂上。
+ * 拧一颗的标准铺陈：开会话，把「帮我拧上」挂上。
  *
  * 四个拧螺丝的步骤这一段本来一字不差地各写了一遍，于是 `onProgress` 的形参
- * 也各写错了一遍 —— 引擎发的是 `{nm, depth, zone, …}` 一整个对象，四处都当成
- * 一个数直接 `toFixed`。这类活写一次就够。
+ * 也各写错了一遍。这类活写一次就够。
  */
 export function fasten(ctx, fastenerId, hooks = {}) {
   const f = ctx.bom.fastener(fastenerId);
-  const gauge = (nm) => ctx.hud.setTorqueGauge({
-    nm, min: f.torque[0], max: f.torque[1], strip: f.strip,
-  });
-  gauge(0);
   ctx.screw.begin({
     fastenerId,
-    onProgress: (p) => { gauge(p.nm); hooks.onProgress?.(p); },
+    onProgress: hooks.onProgress,
     onTight: hooks.onTight,
-    onStrip: hooks.onStrip,
     onWrongWay: hooks.onWrongWay,
   });
   ctx.hud.setAlts([{ label: '帮我拧上', ico: 'wrench', onClick: () => ctx.screw.autoRun(fastenerId) }]);
   return f;
 }
 
-/** 同上，一组交叉拧紧的（面盖那四颗）。扭矩表跟着手上正在拧的那一颗走 */
+/** 同上，一组交叉拧紧的（面盖那四颗） */
 export function fastenGroup(ctx, group, hooks = {}) {
-  const spec = ctx.bom.groupOf(group)[0];
-  const gauge = (nm) => ctx.hud.setTorqueGauge({
-    nm, min: spec.torque[0], max: spec.torque[1], strip: spec.strip,
-  });
   ctx.screw.beginGroup({
     group,
-    onProgress: (p) => gauge(p.nm),
-    // 还有下一颗才把表归零。最后一颗拧完还归零的话，四个绿勾旁边挂着一块
-    // 「0.0 N·m」，读起来像是白拧了 —— 那个数应该停在最后一颗到的扭矩上
-    onEach: (id, info) => { if (info.remaining) gauge(0); hooks.onEach?.(id, info); },
+    onEach: hooks.onEach,
     onAll: hooks.onAll,
   });
-  gauge(0);
   ctx.hud.setAlts([{ label: '帮我拧上', ico: 'wrench', onClick: () => ctx.screw.autoRun() }]);
 }

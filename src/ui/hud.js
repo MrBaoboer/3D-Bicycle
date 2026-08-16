@@ -17,7 +17,6 @@
 
 import * as THREE from 'three';
 import { icon } from './icons.js';
-import { torqueText } from '../core/state.js';
 
 /**
  * 怎么操作。前四条第一次进来就该知道，后两条留给右上角的完整版。
@@ -32,8 +31,9 @@ const GUIDE = [
   { ico: 'rotate', t: '按住画面拖，换个角度看；滚轮缩放。转到哪儿就停在哪儿',
     touch: '按住画面拖，换个角度看；双指开合缩放。转到哪儿就停在哪儿' },
   { ico: 'drag', t: '零件顺着箭头指的方向拖，快到位会自己吸住' },
-  { ico: 'screw', t: '螺丝按住绕圈拧，扭矩表走进绿区就停手' },
-  { ico: 'menu', t: '深色、声音、扭矩单位，都在右上角那枚按钮里', full: true },
+  { ico: 'screw', t: '螺丝按住绕圈拧，拧到底就上好了',
+    touch: '螺丝按住绕圈拧，拧到底就上好了' },
+  { ico: 'menu', t: '深色与声音在右上角那枚按钮里', full: true },
   { ico: 'wrench', t: '不想自己动手，按「帮我装上」自动做完 —— 该看的、该听的一样不少', full: true },
 ];
 
@@ -66,48 +66,11 @@ const guideMark = (r) => (r.keys
   ? r.keys.map(cap).join('')
   : `<span class="guide-ico">${icon(r.ico)}</span>`);
 
-// ══════════════ 扭矩表的几何 ══════════════
-
-/** 弧从 200° 起、到 −20° 止，顺时针扫 220°。写死在这里，CSS 只管颜色与粗细 */
-const DIAL = { cx: 60, cy: 60, r: 44, a0: 200, a1: -20 };
-
-const dialAngle = (t) => DIAL.a0 + (DIAL.a1 - DIAL.a0) * t;
-
-function dialPoint(deg) {
-  const a = (deg * Math.PI) / 180;
-  return [DIAL.cx + DIAL.r * Math.cos(a), DIAL.cy - DIAL.r * Math.sin(a)];
-}
-
-/** 量程上 [t0,t1] 这一段弧，t 取 0–1 */
-function dialArc(t0, t1) {
-  const a0 = dialAngle(Math.max(0, Math.min(1, t0)));
-  const a1 = dialAngle(Math.max(0, Math.min(1, t1)));
-  const [x0, y0] = dialPoint(a0);
-  const [x1, y1] = dialPoint(a1);
-  const large = Math.abs(a1 - a0) > 180 ? 1 : 0;
-  return `M${x0.toFixed(1)} ${y0.toFixed(1)}A${DIAL.r} ${DIAL.r} 0 ${large} 1 ${x1.toFixed(1)} ${y1.toFixed(1)}`;
-}
-
-/** 「5.0–6.0 N·m」：单位只印一次，换算仍然只有 core/state.js 那一处 */
-const goalText = (min, max) => `${torqueText(min).replace(/\s.+$/, '')}–${torqueText(max)}`;
-
-const GAUGE_HTML = `
-  <svg class="dial" viewBox="0 0 120 80" aria-hidden="true">
-    <path class="dial-track" d="${dialArc(0, 1)}"/>
-    <path class="dial-ok" d=""/>
-    <path class="dial-hot" d=""/>
-    <path class="dial-val" d="${dialArc(0, 1)}" pathLength="100"/>
-    <g class="dial-hand"><line x1="${DIAL.cx}" y1="10" x2="${DIAL.cx}" y2="24"/></g>
-  </svg>
-  <b class="gauge-nm"></b>
-  <span class="gauge-goal"></span>`;
-
-/** 螺丝的四种状态。图标不是装饰：四种状态只靠颜色分，色觉障碍读不出来 */
+/** 螺丝的三种状态。图标不是装饰：只靠颜色分，色觉障碍读不出来 */
 const BOLT = {
   pending: { t: '还没上', ico: '' },
   threading: { t: '正在拧', ico: 'screw' },
-  tight: { t: '已到扭矩', ico: 'check' },
-  stripped: { t: '滑丝了', ico: 'warn' },
+  tight: { t: '拧上了', ico: 'check' },
 };
 
 /** 「面盖螺丝 · 上左」在一排四颗里只印得下「上左」，全名留给读屏 */
@@ -145,10 +108,10 @@ const SHELL = `
   <aside class="note scroll" id="hud-note" aria-label="这一步的原理" hidden></aside>
   <div class="readout" hidden>
     <ul class="bolts" role="list" hidden></ul>
-    <div class="gauge" data-state="low" hidden>${GAUGE_HTML}</div>
   </div>
 </div>
 
+<div class="tag" role="status" aria-live="polite" hidden></div>
 <div class="toast" role="status" aria-live="polite" hidden></div>
 <p class="sr-only sr-step" role="status" aria-live="polite"></p>
 
@@ -180,10 +143,8 @@ export class HUD {
       topbar: q('.topbar'), chapters: q('.rail'), stepno: q('.stepno'), steptitle: q('.steptitle'),
       cue: q('.cue'), menu: q('.btn-menu'),
       side: q('.side'),
-      note: q('.note'), noteTab: q('.note-tab'), toast: q('.toast'), srStep: q('.sr-step'),
-      readout: q('.readout'), bolts: q('.bolts'), gauge: q('.gauge'),
-      dialOk: q('.dial-ok'), dialHot: q('.dial-hot'), dialVal: q('.dial-val'), dialHand: q('.dial-hand'),
-      gaugeNm: q('.gauge-nm'), gaugeGoal: q('.gauge-goal'),
+      note: q('.note'), noteTab: q('.note-tab'), toast: q('.toast'), tag: q('.tag'), srStep: q('.sr-step'),
+      readout: q('.readout'), bolts: q('.bolts'),
       foot: q('.foot'), alts: q('.alts'), task: q('.btn-task'),
       prev: q('.nav-prev'), next: q('.nav-next'),
       overlay: q('.overlay'),
@@ -198,7 +159,6 @@ export class HUD {
     this._tip = null;
     this._note = null;
     this._noteOpen = false;
-    this._dial = null;
     this._boltKey = '';
     this._escape = null;
     this._returnFocus = null;
@@ -244,7 +204,7 @@ export class HUD {
   /**
    * 量一下界面实际占掉了画面的哪几条边，交给 stage.setSafeArea。
    *
-   * 不是装饰性的细节：扭矩表和一排螺丝摊在底下时，三维若不知道自己只剩上面那块，
+   * 不是装饰性的细节：一排螺丝摊在底下时，三维若不知道自己只剩上面那块，
    * 正在拧的那颗螺栓就会被读数压住 —— 而这一步要看的正是它。
    * 宽屏上右边那张说明卡同理，它有 300 px 宽。
    */
@@ -273,7 +233,7 @@ export class HUD {
      *   贴底 —— 下沿离屏幕底不超过一条底部条再加一点。少了它，一个摆在右上角的
      *           读数区也会被算成「底部占了 632 像素」，三维于是以为自己只剩上面
      *           一小条，把主体整个顶出画面。
-     *   挡道 —— 与画面横向中间那一半有重叠。车是横向居中的，缩在右下角的扭矩表
+     *   挡道 —— 与画面横向中间那一半有重叠。车是横向居中的，缩在右下角的读数
      *           挡不到它；把那 270 像素也算进去，整车就被无谓地推上去一大截。
      * 判据用几何而不是元素身份：谁摆在哪由 CSS 说了算，这里不该假设。
      */
@@ -464,6 +424,31 @@ export class HUD {
     this._toastTimer = setTimeout(() => { e.hidden = true; }, dur);
   }
 
+  /**
+   * 跟着指针走的一枚小标签：把光标下那件东西叫什么说出来。
+   * 传 null 收起。
+   *
+   * @param {string|null} text
+   * @param {number} x @param {number} y 视口坐标
+   */
+  tag(text, x = 0, y = 0) {
+    const el = this.el.tag;
+    if (!text) {
+      if (!el.hidden) { el.hidden = true; el.textContent = ''; }
+      return;
+    }
+    // 名字没变就只挪位置。每帧重写 textContent 会让读屏把同一个名字念个不停
+    if (el.textContent !== text) el.textContent = text;
+    el.hidden = false;
+    // 贴在光标右下；快顶到右缘或下缘时翻到另一侧，别被屏幕裁掉
+    const w = el.offsetWidth;
+    const h = el.offsetHeight;
+    const flipX = x + 16 + w > innerWidth - 8;
+    const flipY = y + 14 + h > innerHeight - 8;
+    el.style.left = `${Math.max(8, flipX ? x - 16 - w : x + 16)}px`;
+    el.style.top = `${Math.max(8, flipY ? y - 14 - h : y + 14)}px`;
+  }
+
   // ══════════════ 知识卡片 ══════════════
 
   /** @param {null | {title?:string, spec?:Array<[string,string]>, body?:string, foot?:string}} n */
@@ -567,59 +552,9 @@ export class HUD {
     }
   }
 
-  // ══════════════ 扭矩表 ══════════════
-
-  /**
-   * 弧形扭矩表：现在多少、绿区在哪、离滑丝还剩多少。拧螺丝时的主要读数。
-   *
-   * 量程钉在滑丝阈值上，不是钉在上限 —— 5–6 N·m 的面盖螺丝和 35–40 N·m 的脚踏轴
-   * 若都把绿区画在弧的正中，两块表看着一模一样，手上却差着七倍。
-   *
-   * 每帧都会被调用，所以除了那段扫过去的弧，其余一律先比对再落笔。
-   * 不传参数就收起。
-   *
-   * @param {{nm:number, min:number, max:number, strip:number}} [o]
-   */
-  setTorqueGauge(o) {
-    const g = this.el.gauge;
-    if (!o) {
-      if (!g.hidden) { g.hidden = true; this._dial = null; this.#syncReadout(); }
-      return;
-    }
-    const { nm = 0, min = 0, max = min, strip = max * 1.6 } = o;
-    const span = strip > 0 ? strip : 1;
-
-    let d = this._dial;
-    if (!d || d.min !== min || d.max !== max || d.strip !== strip) {
-      this.el.dialOk.setAttribute('d', dialArc(min / span, max / span));
-      this.el.dialHot.setAttribute('d', dialArc(max / span, 1));
-      this.el.gaugeGoal.textContent = `目标 ${goalText(min, max)}`;
-      d = { min, max, strip, state: '', text: '' };
-      this._dial = d;
-      g.hidden = false;
-      this.#syncReadout();
-    }
-
-    const t = Math.max(0, Math.min(1, nm / span));
-    this.el.dialVal.style.strokeDasharray = `${(t * 100).toFixed(2)} 100`;
-    this.el.dialHand.setAttribute('transform', `rotate(${(90 - dialAngle(t)).toFixed(1)} ${DIAL.cx} ${DIAL.cy})`);
-
-    const text = torqueText(nm);
-    if (text !== d.text) { d.text = text; this.el.gaugeNm.textContent = text; }
-
-    const state = nm >= strip ? 'stripped' : nm > max ? 'over' : nm >= min ? 'ok' : 'low';
-    if (state === d.state) return;
-    d.state = state;
-    g.dataset.state = state;
-    // 到点得有一下明确的落地感：换个颜色不够，动画重放一次，眼睛才会从车上挪过来看一眼
-    if (state === 'ok' || state === 'stripped') {
-      g.style.animation = 'none'; void g.offsetWidth; g.style.animation = '';
-    }
-  }
-
   /**
    * 一排螺丝状态点。面盖四颗那一步靠它交代「哪颗拧过了、哪颗还空着」。
-   * @param {Array<{id:string, name:string, state:'pending'|'threading'|'tight'|'stripped'}>} list
+   * @param {Array<{id:string, name:string, state:'pending'|'threading'|'tight'}>} list
    */
   setBoltRow(list) {
     const ul = this.el.bolts;
@@ -650,7 +585,7 @@ export class HUD {
   }
 
   #syncReadout() {
-    this.el.readout.hidden = !this._chrome || (this.el.gauge.hidden && this.el.bolts.hidden);
+    this.el.readout.hidden = !this._chrome || this.el.bolts.hidden;
     this.#syncSafe();
   }
 
@@ -661,12 +596,8 @@ export class HUD {
     const toggles = [
       { k: 'theme', ico: 'theme', label: '深色', theme: true },
       { k: 'sound', ico: 'sound', label: '声音' },
-      // 北美的扭矩扳手刻的是 lb·ft，读数对不上就没法照着拧
-      { k: 'torqueUnit', ico: 'torque', label: '扭矩用 lb·ft', unit: true },
     ];
-    const read = (t) => (t.theme ? this.state.theme === 'dark'
-      : t.unit ? this.state.torqueUnit === 'lbft'
-        : !!this.state[t.k]);
+    const read = (t) => (t.theme ? this.state.theme === 'dark' : !!this.state[t.k]);
 
     const m = document.createElement('div');
     m.className = 'menu';
@@ -702,7 +633,6 @@ export class HUD {
       if (t) {
         const v = !read(t);
         if (t.theme) this.setTheme(v ? 'dark' : 'light');
-        else if (t.unit) { this.state.torqueUnit = v ? 'lbft' : 'nm'; this.#repaintTorque(); }
         else { this.state[t.k] = v; }
         b.setAttribute('aria-checked', String(v));
         if (t.k === 'sound') this.onSound?.(v);
@@ -730,14 +660,6 @@ export class HUD {
     if (this._away) { removeEventListener('pointerdown', this._away, true); this._away = null; }
     // 焦点若还在菜单里，关掉后送回菜单按钮 —— 否则直接掉到 body
     if (hadFocus) this.el.menu.focus();
-  }
-
-  /** 换了单位，表上的数得当场跟着换，不能等下一次拧 */
-  #repaintTorque() {
-    const d = this._dial;
-    if (!d || this.el.gauge.hidden) return;
-    d.text = '';
-    this.el.gaugeGoal.textContent = `目标 ${goalText(d.min, d.max)}`;
   }
 
   setTheme(mode) {

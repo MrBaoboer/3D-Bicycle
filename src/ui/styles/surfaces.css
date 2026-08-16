@@ -213,16 +213,11 @@ button.tally-row:active { background: var(--shade); }
   white-space: nowrap;
 }
 
-/* 三种结果各带一处形状差别：到位有前缀勾，没做是虚字，滑丝加一道下划线 */
+/* 两种结果各带一处形状差别：到位有前缀勾，没做是虚字 */
 .tally-row[data-tone="ok"] .tally-val { color: var(--go); }
 .tally-row[data-tone="ok"] .tally-val::before { content: '✓ '; }
 .tally-row[data-tone="miss"] { color: var(--text-3); }
 .tally-row[data-tone="miss"] .tally-val { color: var(--text-3); }
-.tally-row[data-tone="bad"] .tally-val {
-  color: var(--stop);
-  text-decoration: underline wavy var(--stop) 1px;
-  text-underline-offset: 3px;
-}
 
 .tally-mark {
   max-width: 420px;

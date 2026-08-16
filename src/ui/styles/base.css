@@ -76,7 +76,7 @@ svg { display: block; }
   color: var(--text-3);
 }
 
-/* 数字一律等宽，且不等比 —— 扭矩表跳数时后面的单位不能跟着挪 */
+/* 数字一律等宽，且不等比 —— 步骤号跳数时后面的字不能跟着挪 */
 .num {
   font-family: var(--mono);
   font-variant-numeric: tabular-nums;

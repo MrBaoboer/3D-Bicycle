@@ -79,8 +79,10 @@ export class Slide {
    * @param {string} [o.wrongHint] 方向错了时说什么
    * @param {string} [o.sound] 坐实时放哪一记，默认 SEAT_IN。
    *   轮子落进勾爪比座管滑进立管沉，两者共用一份配方、只差增益，见 audio/sfx.js 的别名表
+   * @param {number} [o.glow] 待装件的自发光强度，默认 0.1（进了吸附范围三倍）。
+   *   细长的深色件要调高：两根黑油管贴在黑碳纤维车架上，0.1 那一档等于没亮
    */
-  begin({ partId, onSeat, onAll, wrongHint, sound } = {}) {
+  begin({ partId, onSeat, onAll, wrongHint, sound, glow = 0.1 } = {}) {
     this.cancel();
     const ids = Array.isArray(partId) ? [...partId] : [partId];
     const items = new Map();
@@ -95,7 +97,7 @@ export class Slide {
     }
     this.session = {
       items, owner, pending: new Set(ids), total: ids.length, seated: 0,
-      fails: 0, offered: false, onSeat, onAll, wrongHint, sound: sound || 'SEAT_IN',
+      fails: 0, offered: false, onSeat, onAll, wrongHint, sound: sound || 'SEAT_IN', glow,
     };
     for (const rig of items.values()) this.#setU(rig, 0);
     this.#pulse();
@@ -166,7 +168,7 @@ export class Slide {
       return { obj, home: this.#home(obj), step, basis };
     });
 
-    const rig = { id, name: part.name, dir: d, gap, snap, nodes, center: null, u: 1 };
+    const rig = { id, name: part.name, dir: d, gap, snap, nodes, center: null, half: 0, u: 1 };
 
     // 形心要在**合装态**下量：件此刻可能正停在预备位，照那个量出来的中心
     // 会把方向箭头再往外推一个 gap，指到车外面去
@@ -176,6 +178,11 @@ export class Slide {
     rig.center = box.isEmpty()
       ? nodes[0].obj.getWorldPosition(new THREE.Vector3())
       : box.getCenter(new THREE.Vector3());
+    // 沿装配方向的半深 —— 箭头要摆在件的前沿之外，不然它就是画在件身上的一道条纹
+    if (!box.isEmpty()) {
+      const s = box.getSize(new THREE.Vector3());
+      rig.half = 0.5 * (Math.abs(s.x * d.x) + Math.abs(s.y * d.y) + Math.abs(s.z * d.z));
+    }
     this._rigs.set(id, rig);
     return rig;
   }
@@ -231,12 +238,19 @@ export class Slide {
     if (!s) return;
     this.ctx.guides?.set([...s.pending].map((id) => {
       const rig = s.items.get(id);
+      /*
+       * 尾巴落在件的**前沿**，不是件的形心 —— 压在形心上时箭头有一半埋在件里，
+       * 读起来像画在件身上的一道橙条纹，而不是「往这边去」。
+       * 但不许越过装配位（大件的半深比行程还长，比如整只前轮），
+       * 越过去就成了指着车里面。
+       */
+      const off = Math.min(0, rig.half - rig.gap);
       return {
-        pos: rig.center.clone().addScaledVector(rig.dir, -rig.gap),
+        pos: rig.center.clone().addScaledVector(rig.dir, off),
         dir: rig.dir.clone(),
         // 箭头按行程长短定大小。写死 5 cm 的话，它在 0.7 m 的前轮上只有轮径的 7%，
         // 混在辐条与碟片里根本看不出是个箭头 —— 而它是「往哪儿使劲」的唯一答案
-        len: Math.max(0.05, rig.gap * 0.6),
+        len: Math.max(0.07, rig.gap * 0.7),
       };
     }));
   }
@@ -246,11 +260,12 @@ export class Slide {
     const s = this.session;
     if (!s) return;
     this.ctx.bike.clearHighlights?.();
+    const base = s.glow;
     for (const id of s.pending) {
       for (const n of s.items.get(id).nodes) {
         // 自发光只加到「认得出是同一个零件」为止。再高一档，深色主题下
         // 碳纹与阳极氧化会被烧成一片橙，看着像换了个零件而不是同一个被点亮
-        this.ctx.bike.highlight?.(n.obj.name, ACCENT, id === near ? 0.3 : 0.1);
+        this.ctx.bike.highlight?.(n.obj.name, ACCENT, Math.min(1, id === near ? base * 3 : base));
       }
     }
   }
