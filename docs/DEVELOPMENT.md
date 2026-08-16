@@ -339,12 +339,12 @@ Y 轴向上（glTF 规范），+Z 是车的左侧，−X 是车头，**1 单位 
 `connect-src` 少放 `blob:` 的话，GLTFLoader 取不到贴图，而页面看上去还是「能开」。
 CSP 只进构建产物，不进 index.html —— 开发期 Vite 靠动态 `<style>` 注样式。
 
-**线上地址必须用项目自带的那一个，不要用手工别名。**
+**主地址 `3d-bicycle.vercel.app` 是别名，不会自己跟随部署 —— 由工作流发一次指一次。**
 
 `3d-bicycle-tau.vercel.app` 是 Vercel 给这个项目分配的生产域名，
-每次生产部署自动指过去 —— 这是唯一可靠的那一档。
+在项目的域名表里，每次生产部署自动指过去 —— 不需要任何人管。
 
-曾经把 `3d-bicycle.vercel.app` 当主地址用，代价很大。查清楚的状态是这样：
+主地址那条是另一回事。查清楚的状态是这样：
 
 - 那条别名**确实是本账号建的**（alias 记录里 `creator` 是本人，`projectId` 就是本项目），
   所以 `vercel alias set` 指得动，指过去也真的发本项目的内容；
@@ -353,19 +353,34 @@ CSP 只进构建产物，不进 index.html —— 开发期 Vite 靠动态 `<sty
 - 想把它补进域名表补不进去：`POST /v10/projects/{id}/domains` 与
   `vercel domains add --force` 都报 `owned-on-other-team / alias_conflict`。
   这是 Vercel 侧的名字占用记录，API 挪不动。
+  **把别名整条删掉再加也一样报** —— 所以不是「别名占着自己」，
+  是这个名字在 Vercel 那边另有归属记录。
+- 不是 `.vercel.app` 一律不让加：拿 `3d-bicycle-probe-9f2k.vercel.app` 试过，
+  `domains add` 直接成功（随后已删）。卡的只有 `3d-bicycle` 这一个名字。
 
-于是只能每次发版后手工 `vercel alias set` 打补丁，而这个补丁自己还会与部署赛跑 ——
-有一次指过去的是**上一个提交**的部署，线上主地址落后 GitHub Pages 一整个版本，
-而两边都返回 200、标题一样，从外面看不出问题。
+所以只能发一次指一次。这件事现在由 `.github/workflows/vercel-alias.yml`
+（推到 `main` 后跑 `tools/vercel-alias.mjs`）做，手工那一版的坑它都避开了：
+
+- **按 commit SHA 认部署**，不取「最新」。手工打补丁会与部署赛跑 ——
+  有一次指过去的是**上一个提交**的部署，线上主地址落后 GitHub Pages 一整个版本，
+  而两边都返回 200、标题一样，从外面看不出问题；
+- 指完再比一次入口 JS 的内容哈希，对不上当场退 1，不会「指了个寂寞」还绿灯；
+- 没配 `VERCEL_TOKEN` 就跳过而不是失败 —— 主地址不跟随是「没跟上」，不是「坏了」。
+
+那条 secret 要自己去加：仓库 Settings → Secrets and variables → Actions，
+名字 `VERCEL_TOKEN`，值在 <https://vercel.com/account/tokens> 生成，
+scope 选 `masterbao66's projects`。没加之前主地址不会自动跟，
+本地 `npm run alias` 可以随时手工补一次（走本机已登录的 CLI，不需要 token）。
 
 **顺带排除一个常见猜测**：不是改仓库名导致的。`-tau` 后缀在
 `2026-08-15T17:37:29Z` 建项目那一秒就产生了（Vercel 只在
 `<项目名>.vercel.app` 已被占用时才加随机后缀），而仓库改名发生在约 18 小时之后；
 账号下也只有一个 `3d-bicycle` 项目，改名没有产生重复项目。
 
-**核对办法**：`npm run live`（`tools/live-check.mjs`）。它比对两处首页里那个
+**核对办法**：`npm run live`（`tools/live-check.mjs`）。它比对三处首页里那个
 带内容哈希的入口 JS 文件名 —— 一样才是同一份产物，对不上当场退 1。
 只看「打得开 / 返回 200」是不够的：掉队的那一次两边都返回 200、标题也一样。
+只有「Vercel 主」对不上，说明别名没跟上，`npm run alias` 当场补。
 
 `vercel.json` 另外发一组安全响应头。缓存分两档：
 `/assets/` 里的产物带内容哈希，给一年 immutable；

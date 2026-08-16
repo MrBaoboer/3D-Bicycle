@@ -5,7 +5,7 @@
 二十七个大件、七颗螺丝，八章二十九步 —— 每一件都亲眼看着装上去。
 给想弄明白「一台车到底由什么组成、为什么必须这么装」的人。
 
-**▶ 打开看看：<https://3d-bicycle-tau.vercel.app>**
+**▶ 打开看看：<https://3d-bicycle.vercel.app>**
 首屏要读一份 12 MB 的整车模型，第一次打开有十来秒加载条。需要 WebGL 2。
 
 ![封面](docs/shots/01-cover.png)
@@ -160,15 +160,22 @@ docs/      CONTRACT.md 模块契约 · DEVELOPMENT.md 开发与维护 · shots/ 
 
 产物是纯静态的，`base` 走相对路径，放任何子路径下都不用改配置。
 
-**线上两处，同一份产物：**
+**线上三处地址，同一份产物：**
 
 | | 地址 | 怎么来的 |
 |---|---|---|
-| 主 | <https://3d-bicycle-tau.vercel.app> | 推到 `main` → Vercel 出一次生产部署，域名自动跟上 |
+| 主 | <https://3d-bicycle.vercel.app> | 同一批产物，由 `.github/workflows/vercel-alias.yml` 指到本次提交的部署 |
+| 自带 | <https://3d-bicycle-tau.vercel.app> | 推到 `main` → Vercel 出一次生产部署，这条在域名表里，自动跟上 |
 | 备 | <https://mrbaoboer.github.io/3D-Bicycle/> | `.github/workflows/deploy.yml` → GitHub Pages |
 
-两处都是全自动的，发版之后不需要任何手工步骤。`npm run live` 对一下两处发的是不是同一份产物 ——
+后两条全自动。主地址那条要多一步：它不在 Vercel 项目的域名表里，也补不进去，
+所以不会自己跟随生产部署，得发一次指一次 —— 这件事交给上面那条工作流做了，
+它按 commit SHA 认部署，不会指到上一个版本去。原委见
+[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)。
+
+`npm run live` 对一下三处发的是不是同一份产物 ——
 判据是入口 JS 的内容哈希，只看「打得开」是不够的。
+主地址真掉队了，`npm run alias` 当场补上。
 
 
 本地预览：

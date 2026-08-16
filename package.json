@@ -17,7 +17,8 @@
     "shots": "node tools/shots.mjs",
     "frames": "node tools/frame-audit.mjs",
     "check": "npm run check:code && npm run smoke",
-    "live": "node tools/live-check.mjs"
+    "live": "node tools/live-check.mjs",
+    "alias": "node tools/vercel-alias.mjs"
   },
   "engines": {
     "node": "^22.13.0 || >=24.0.0"
@@ -38,7 +39,7 @@
     "type": "git",
     "url": "git+https://github.com/MrBaoboer/3D-Bicycle.git"
   },
-  "homepage": "https://3d-bicycle-tau.vercel.app",
+  "homepage": "https://3d-bicycle.vercel.app",
   "bugs": {
     "url": "https://github.com/MrBaoboer/3D-Bicycle/issues"
   }

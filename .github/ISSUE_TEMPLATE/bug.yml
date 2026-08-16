@@ -45,6 +45,7 @@ body:
     attributes:
       label: 在哪儿遇到的
       options:
+        - https://3d-bicycle.vercel.app
         - https://3d-bicycle-tau.vercel.app
         - https://mrbaoboer.github.io/3D-Bicycle/
         - 本地 npm run dev
