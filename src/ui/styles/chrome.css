@@ -1,0 +1,740 @@
+/*
+ * 常驻界面：顶栏、两侧翻页、右列、底部旁白、按钮、读数、菜单、三维标注。
+ *
+ * **没有底部条。** 画面是这份说明书要说的全部，一条横贯屏幕的实底
+ * 会把它切掉一截。界面退到四周，中间整片留给车。
+ *
+ *   顶栏    章节进度轨 + 第几步 + 步名 + 设置。只读。
+ *   两侧    翻页，垂直居中贴边 —— 落在视线的水平线上，只占边上一小条。
+ *   右列    这一步的读数与「为什么」：说明卡贴上、读数贴下。
+ *           两者曾经各自 fixed 在右上角，于是拧面盖那一步的螺丝排被卡片压住。
+ *   底部    一句旁白，以及需要动手时才出现的那一个按钮。都不带整幅底色。
+ *
+ * 常驻件的边距一律走 --pad-*（= --edge + 安全区），不用裸的 --edge。
+ */
+
+/* ══════════════ 顶栏 ══════════════ */
+
+.topbar {
+  position: fixed;
+  inset: 0 0 auto 0;
+  z-index: var(--z-bar);
+  display: flex;
+  flex-direction: column;
+  gap: var(--s3);
+  padding: var(--pad-top) var(--pad-right) var(--s4) var(--pad-left);
+  /* 顶上不做实底，一层由上往下的渐隐够读，也不挡画面 */
+  background: var(--scrim);
+  pointer-events: none;
+  transition: opacity var(--t-slow) var(--ease);
+}
+
+.topbar > * { pointer-events: auto; }
+.topbar[data-quiet="1"] { opacity: 0; pointer-events: none; }
+
+/* ── 进度轨：每章一段，段里每一步一格 ── */
+
+/*
+ * 它同时是进度条和目录，所以每一格都要点得到。
+ * 铺满整幅宽度 —— 缩在左上角的一小截，读出来是「装饰」而不是「我走到哪了」。
+ */
+.rail {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--s3);
+  width: 100%;
+}
+
+/* flex-grow 由界面层按这一章有几步写入，见 hud.setChapters()：
+   宽窄本身就是进度，等宽会让只有一步的那章摊出一格假的长度 */
+.ch { flex: 1 1 0; min-width: 0; }
+.ch-ticks { display: flex; gap: 3px; }
+
+/* 视觉上只有一道细线，命中区留高 —— 手指点得中 */
+.tick {
+  flex: 1;
+  height: 20px;
+  display: block;
+  position: relative;
+}
+@media (pointer: coarse) { .tick { height: 28px; } }
+
+/* 三种状态各自要能看清：没到是一道墨线，走过的是减一档的橙，当下是满橙加高一格。
+   --accent-soft 压在台面上只有 1.4:1，低于非文本 3:1 的下限，
+   拿它做「走过」的话这条轨读起来只剩「当下」一个状态 */
+.tick::before {
+  content: '';
+  display: block;
+  width: 100%;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--text-4);
+  transition: background var(--t-base) var(--ease), height var(--t-fast) var(--ease);
+}
+.tick[data-state="done"]::before { background: var(--accent-mid); }
+.tick[data-state="now"]::before { background: var(--accent); height: 5px; }
+@media (hover: hover) { .tick:hover::before { background: var(--accent); height: 5px; } }
+.tick:focus-visible::before { background: var(--accent); height: 5px; }
+
+.ch-nm {
+  display: block;
+  margin-top: 6px;
+  font-size: var(--fs-mark);
+  letter-spacing: var(--ls-base);
+  line-height: 1;
+  color: var(--text-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: color var(--t-base) var(--ease);
+}
+.ch[data-on="1"] .ch-nm { color: var(--text); font-weight: 600; }
+.ch[data-done="1"] .ch-nm { color: var(--text-2); }
+
+/* 悬停/聚焦时报出那一格是哪一步 —— 一道 3px 的线看不出来 */
+.tick-tip {
+  position: fixed;
+  z-index: var(--z-menu);
+  transform: translate(-50%, 0);
+  padding: 6px var(--s3);
+  border-radius: var(--r-xs);
+  background: var(--surface);
+  color: var(--text);
+  font-size: var(--fs-mini);
+  white-space: nowrap;
+  box-shadow: var(--hair), var(--lift-2);
+  pointer-events: none;
+  animation: fade var(--t-fast) var(--ease) both;
+}
+.tick-tip b {
+  font-family: var(--mono);
+  font-weight: 400;
+  color: var(--text-3);
+  margin-right: var(--s2);
+}
+
+/* ── 第几步 · 步名 · 工具 ── */
+
+.toprow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s4);
+}
+
+.where {
+  display: flex;
+  align-items: baseline;
+  gap: var(--s3);
+  min-width: 0;
+}
+
+.stepno {
+  flex: none;
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--fs-mini);
+  letter-spacing: var(--ls-tight);
+  color: var(--text-3);
+}
+
+.steptitle {
+  font-size: var(--fs-mid);
+  font-weight: 600;
+  letter-spacing: var(--ls-base);
+  line-height: var(--lh-tight);
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.toptools { display: flex; align-items: center; gap: var(--s2); flex: none; }
+
+/* ══════════════ 右列：说明卡 + 读数 ══════════════ */
+
+/*
+ * 一列，说明卡贴上、读数贴下。两者原先各自 fixed 在右上角 ——
+ * 拧面盖那一步，四颗螺丝的状态排整块被说明卡压在下面，而那正是那一步唯一的读数。
+ */
+.side {
+  position: fixed;
+  right: var(--pad-right);
+  top: calc(var(--pad-top) + 96px);
+  bottom: calc(var(--bar-h, 0px) + var(--s3));
+  z-index: var(--z-note);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  justify-content: flex-end;
+  gap: var(--s3);
+  width: min(300px, 30vw);
+  pointer-events: none;
+}
+.side > * { pointer-events: auto; }
+
+/* 卡贴上、读数贴下：中间的空当留给车 */
+.note { margin-bottom: auto; }
+
+/* ── 说明卡 ── */
+
+.note {
+  width: 100%;
+  max-height: 100%;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: var(--s4) var(--s5);
+  color: var(--text);
+  background: var(--surface);
+  border-radius: var(--r-md);
+  box-shadow: var(--hair), var(--lift-2);
+  animation: note-in var(--t-slow) var(--ease) both;
+}
+@keyframes note-in { from { opacity: 0; transform: translateY(-8px); } }
+
+.note-hd {
+  font-size: var(--fs-base);
+  font-weight: 600;
+  letter-spacing: var(--ls-base);
+  line-height: var(--lh-tight);
+  margin-bottom: var(--s3);
+}
+.note p { font-size: var(--fs-tiny); line-height: var(--lh-body); color: var(--text-2); }
+.note p + p { margin-top: var(--s2); }
+.note em { font-style: normal; color: var(--accent); font-weight: 600; }
+
+/*
+ * 规格行：名字在左、值在右，中间点线牵住。
+ *
+ * 必须是 grid 不是 flex —— 「出厂已装 / 车架、后轮、传动、刹车、避震」这种
+ * 值比名字长四倍的行，flex 会把名字压成一列单字（出/厂/已/装），
+ * 值再顶着 nowrap 冲出卡片右缘。名字定宽、值可折行，两边都待在纸上。
+ */
+.note-spec { margin: 0 0 var(--s3); display: grid; gap: 2px; }
+.note-spec .sp {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: baseline;
+  gap: var(--s2);
+  padding: 4px 0;
+  font-size: var(--fs-mini);
+  color: var(--text-3);
+}
+.note-spec .sp > span { white-space: nowrap; }
+.note-spec .sp i {
+  height: 0;
+  border-bottom: 1px dotted var(--line);
+  transform: translateY(-3px);
+}
+.note-spec .sp b {
+  font-weight: 500;
+  font-size: var(--fs-tiny);
+  color: var(--text);
+  text-align: right;
+  /* 值可以折行；长值折两行也比冲出卡片好 */
+  min-width: 0;
+}
+/* 纯数值的行走等宽，跳动时不推着旁边的字走 */
+.note-spec .sp b.num { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+
+.note-foot {
+  margin-top: var(--s3);
+  padding-top: var(--s3);
+  border-top: 1px solid var(--line-2);
+  font-size: var(--fs-mini);
+  line-height: var(--lh-tight);
+  color: var(--text-3);
+}
+
+/* ── 读数：扭矩表与螺丝排 ── */
+
+.readout {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--s2);
+}
+
+.gauge {
+  display: grid;
+  grid-template-columns: auto auto;
+  grid-template-rows: auto auto;
+  align-items: center;
+  gap: 0 var(--s3);
+  padding: var(--s2) var(--s4) var(--s2) var(--s3);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  box-shadow: var(--hair), var(--lift-2);
+}
+
+.dial { grid-row: 1 / 3; width: 84px; height: 56px; }
+.dial path { fill: none; stroke-linecap: round; }
+.dial-track { stroke: var(--line); stroke-width: 7; }
+.dial-ok { stroke: var(--go); stroke-width: 7; opacity: 0.5; }
+.dial-hot { stroke: var(--stop); stroke-width: 7; opacity: 0.4; }
+
+/* 值弧靠 stroke-dasharray 走，pathLength=100 把长度归一成百分比 */
+.dial-val {
+  stroke: var(--text-2);
+  stroke-width: 7;
+  stroke-dasharray: 0 100;
+  transition: stroke var(--t-base) var(--ease);
+}
+.dial-hand line { stroke: var(--text); stroke-width: 2.5; stroke-linecap: round; }
+
+.gauge-nm {
+  align-self: end;
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--fs-read);
+  font-weight: 600;
+  line-height: 1.1;
+  color: var(--text);
+  white-space: nowrap;
+}
+.gauge-goal {
+  align-self: start;
+  font-size: var(--fs-mark);
+  letter-spacing: var(--ls-base);
+  color: var(--text-3);
+  white-space: nowrap;
+}
+
+/* 四档：没到 / 到位 / 过了 / 滑丝。颜色之外还各有一处形状差别（弧长、指针位置） */
+.gauge[data-state="ok"] .dial-val { stroke: var(--go); }
+.gauge[data-state="ok"] .gauge-nm { color: var(--go); }
+.gauge[data-state="over"] .dial-val { stroke: var(--warn); }
+.gauge[data-state="over"] .gauge-nm { color: var(--warn); }
+.gauge[data-state="stripped"] .dial-val { stroke: var(--stop); }
+.gauge[data-state="stripped"] .gauge-nm { color: var(--stop); }
+
+/* 到点与滑丝各闪一下 —— 换个颜色不够，眼睛还在车上，得有个动静把它叫过来 */
+.gauge[data-state="ok"] { animation: gauge-hit 0.42s var(--ease); }
+.gauge[data-state="stripped"] { animation: gauge-bad 0.42s var(--ease); }
+@keyframes gauge-hit {
+  0%, 100% { transform: scale(1); }
+  40% { transform: scale(1.05); }
+}
+@keyframes gauge-bad {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-4px); }
+  75% { transform: translateX(4px); }
+}
+
+/* ── 一排螺丝状态 ── */
+
+.bolts {
+  display: flex;
+  gap: var(--s2);
+  margin: 0;
+  padding: var(--s2) var(--s3);
+  list-style: none;
+  border-radius: var(--r-md);
+  background: var(--surface);
+  box-shadow: var(--hair), var(--lift-2);
+}
+
+.bolt { display: flex; flex-direction: column; align-items: center; gap: 3px; min-width: 42px; }
+
+/* 四种状态只靠颜色分，色觉障碍读不出来 —— 到位与滑丝各带一枚图标 */
+.bolt-dot {
+  display: grid;
+  place-items: center;
+  width: 22px; height: 22px;
+  border-radius: 50%;
+  color: var(--on-accent);
+  box-shadow: inset 0 0 0 2px var(--line);
+  transition: background var(--t-base) var(--ease), box-shadow var(--t-base) var(--ease);
+}
+.bolt-dot .ico { width: 13px; height: 13px; stroke-width: 2; }
+.bolt-nm { font-size: var(--fs-mark); color: var(--text-3); white-space: nowrap; }
+
+.bolt[data-state="threading"] .bolt-dot { box-shadow: inset 0 0 0 2px var(--accent); }
+.bolt[data-state="tight"] .bolt-dot { background: var(--go); box-shadow: none; }
+.bolt[data-state="stripped"] .bolt-dot { background: var(--stop); box-shadow: none; }
+
+/* ══════════════ 底部旁白与动手按钮 ══════════════ */
+
+/*
+ * 没有底部条。这里只是一列浮在画面上的东西：需要动手时那一个按钮，和一句旁白。
+ * 一条横贯屏幕的实底会把画面切掉一截，而画面正是这份说明书要说的全部。
+ * 整块不吃指针事件，只有按钮自己吃 —— 旁边的空当仍然可以按住转画面。
+ */
+.foot {
+  position: fixed;
+  inset: auto 0 0 0;
+  z-index: var(--z-bar);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--s3);
+  padding: 0 calc(var(--pad-right) + 64px) var(--pad-bottom) calc(var(--pad-left) + 64px);
+  pointer-events: none;
+  transition: opacity var(--t-slow) var(--ease);
+}
+.foot > * { pointer-events: auto; }
+.foot[data-quiet="1"] { opacity: 0; pointer-events: none; }
+
+/*
+ * 旁白。全片唯一一处常驻文字，一行说完。
+ * 压在三维之上，所以贴着字给一层浅底：白车身上的深字、深车身上的浅字，
+ * 两头都要读得出来，而一条整幅的实底又太重。
+ */
+.cue {
+  max-width: min(44em, 100%);
+  padding: 7px var(--s4);
+  border-radius: var(--r-full);
+  text-align: center;
+  font-size: var(--fs-tiny);
+  letter-spacing: var(--ls-base);
+  line-height: var(--lh-tight);
+  color: var(--text);
+  background: var(--bar);
+  -webkit-backdrop-filter: blur(16px) saturate(1.4);
+  backdrop-filter: blur(16px) saturate(1.4);
+  box-shadow: var(--hair);
+  pointer-events: none;
+  transition: opacity var(--t-base) var(--ease);
+}
+.cue:empty { display: none; }
+
+.actions { display: flex; align-items: center; justify-content: center; gap: var(--s3); flex-wrap: wrap; }
+.actions:empty { display: none; }
+.alts { display: flex; align-items: center; gap: var(--s1); }
+.alts:empty { display: none; }
+
+/* ══════════════ 两侧翻页 ══════════════ */
+
+/*
+ * 垂直居中，贴着左右两边。放这儿而不是底部两角：底部条一取消，
+ * 吊在角上的两枚圆钮就没有依据了；而「上一页 / 下一页」本来就该落在
+ * 视线的水平线上。只占边上一小条，中间整片仍然是按住拖动转画面的地方。
+ */
+.nav {
+  position: fixed;
+  top: 50%;
+  z-index: var(--z-nav);
+  transform: translateY(-50%);
+  display: grid;
+  place-items: center;
+  width: 48px; height: 48px;
+  border-radius: 50%;
+  color: var(--text-2);
+  background: var(--surface);
+  box-shadow: var(--hair), var(--lift-2);
+  transition: color var(--t-base) var(--ease),
+              box-shadow var(--t-base) var(--ease),
+              opacity var(--t-base) var(--ease);
+}
+.nav .ico { width: 22px; height: 22px; stroke-width: 1.5; transition: transform var(--t-fast) var(--ease); }
+.nav-prev { left: var(--pad-left); }
+.nav-next { right: var(--pad-right); }
+
+@media (hover: hover) {
+  .nav:hover:not(:disabled) { color: var(--accent); box-shadow: var(--hair-on), var(--lift-3); }
+  .nav-prev:hover:not(:disabled) .ico { transform: translateX(-3px); }
+  .nav-next:hover:not(:disabled) .ico { transform: translateX(3px); }
+}
+.nav:disabled { opacity: 0.26; }
+@media (pointer: coarse) { .nav { width: 52px; height: 52px; } .nav .ico { width: 24px; height: 24px; } }
+
+/* 这一步演完了，右边那枚亮一下 —— 它此刻的意思是「再按一下才走」。
+   除了变橙还多描一圈：减少动效时那段位移被关掉，只剩颜色就成了
+   「唯一靠辨色传达的信息」，一圈描边是形状上的差别 */
+.nav.ready { color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft), var(--lift-3); }
+.nav.ready .ico { animation: nav-ready 1.5s var(--ease) 2; }
+@keyframes nav-ready {
+  0%, 100% { transform: translateX(0); }
+  50% { transform: translateX(5px); }
+}
+
+/* ══════════════ 按钮 ══════════════ */
+
+.btn {
+  font: inherit;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s2);
+  min-height: 44px;
+  padding: 0.6em 1.5em;
+  border-radius: var(--r-full);
+  font-size: var(--fs-base);
+  letter-spacing: var(--ls-base);
+  color: var(--text);
+  background: var(--surface);
+  box-shadow: var(--hair), var(--lift-1);
+  transition: transform var(--t-fast) var(--ease),
+              background var(--t-base) var(--ease),
+              box-shadow var(--t-base) var(--ease);
+}
+.btn .ico { width: 17px; height: 17px; }
+@media (hover: hover) { .btn:hover:not(:disabled) { box-shadow: var(--hair-on), var(--lift-2); } }
+.btn:active:not(:disabled) { transform: scale(0.97); }
+.btn:disabled { opacity: 0.45; box-shadow: var(--hair); }
+
+/* 一屏最多一个橙色按钮 —— 它就是「现在该按的那一个」 */
+.btn-primary {
+  color: var(--on-accent);
+  background: var(--accent);
+  box-shadow: var(--lift-2);
+}
+@media (hover: hover) { .btn-primary:hover:not(:disabled) { background: var(--accent-lift); box-shadow: var(--lift-3); } }
+
+.btn-text {
+  min-height: 38px;
+  padding: 0.4em 0.9em;
+  font-size: var(--fs-tiny);
+  color: var(--text-3);
+  background: none;
+  box-shadow: none;
+}
+@media (hover: hover) { .btn-text:hover:not(:disabled) { color: var(--accent); background: var(--shade); box-shadow: none; } }
+.btn-text .ico { width: 15px; height: 15px; }
+
+
+.icon-btn {
+  display: inline-grid;
+  place-items: center;
+  width: 40px; height: 40px;
+  border-radius: 50%;
+  color: var(--text-2);
+  background: var(--surface);
+  box-shadow: var(--hair), var(--lift-1);
+  transition: color var(--t-base) var(--ease), box-shadow var(--t-base) var(--ease);
+}
+.icon-btn .ico { width: 20px; height: 20px; }
+@media (hover: hover) { .icon-btn:hover { color: var(--accent); box-shadow: var(--hair-on), var(--lift-2); } }
+@media (pointer: coarse) { .icon-btn { width: 44px; height: 44px; } }
+
+/* 顶栏那枚「为什么」：窄屏才出现，用来开合说明卡 */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 40px;
+  padding: 0 var(--s3);
+  border-radius: var(--r-full);
+  font-size: var(--fs-mini);
+  letter-spacing: var(--ls-base);
+  color: var(--text-2);
+  background: var(--surface);
+  box-shadow: var(--hair), var(--lift-1);
+  white-space: nowrap;
+}
+.chip .ico { width: 16px; height: 16px; }
+.chip[data-on="1"] { color: var(--accent); box-shadow: var(--hair-on), var(--lift-1); }
+@media (pointer: coarse) { .chip { height: 44px; } }
+
+/* 宽屏上说明卡一直摊着，没有可开合的东西，这枚钮就不该占位 */
+.note-tab { display: none; }
+
+/* ══════════════ 短提示 ══════════════ */
+
+.toast {
+  position: fixed;
+  left: 50%;
+  top: 16%;
+  z-index: var(--z-toast);
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  max-width: min(520px, 86vw);
+  padding: var(--s2) var(--s5);
+  border-radius: var(--r-full);
+  pointer-events: none;
+  text-align: left;
+  font-size: var(--fs-base);
+  letter-spacing: var(--ls-base);
+  line-height: var(--lh-tight);
+  color: var(--text);
+  background: var(--surface);
+  box-shadow: var(--hair), var(--lift-2);
+  animation: toast-in var(--t-base) var(--ease) both;
+}
+.toast .ico { width: 18px; height: 18px; flex: none; }
+.toast.go { color: var(--go); box-shadow: inset 0 0 0 1px var(--go), var(--lift-2); }
+.toast.stop { color: var(--stop); box-shadow: inset 0 0 0 1px var(--stop), var(--lift-2); }
+@keyframes toast-in { from { opacity: 0; transform: translateX(-50%) translateY(8px); } }
+@keyframes fade { from { opacity: 0; } }
+
+/* ══════════════ 设置菜单 ══════════════ */
+
+.menu {
+  position: fixed;
+  top: calc(var(--pad-top) + 92px);
+  right: var(--pad-right);
+  z-index: var(--z-menu);
+  min-width: 220px;
+  padding: var(--s2);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  box-shadow: var(--hair), var(--lift-3);
+  animation: menu-in var(--t-fast) var(--ease) both;
+}
+@keyframes menu-in { from { opacity: 0; transform: translateY(-6px); } }
+
+.menu button {
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+  width: 100%;
+  min-height: 42px;
+  padding: 0 var(--s3);
+  border-radius: var(--r-sm);
+  font-size: var(--fs-tiny);
+  color: var(--text);
+  text-align: left;
+}
+.menu button .ico { width: 18px; height: 18px; flex: none; color: var(--text-3); }
+@media (hover: hover) { .menu button:hover { background: var(--shade); } }
+.menu button:active { background: var(--shade); }
+
+.sep { height: 1px; margin: var(--s1) var(--s3); background: var(--line-2); }
+
+.sw {
+  flex: none;
+  position: relative;
+  width: 34px; height: 20px;
+  margin-left: auto;
+  border-radius: var(--r-full);
+  background: var(--line);
+  transition: background var(--t-base) var(--ease);
+}
+.sw::after {
+  content: '';
+  position: absolute;
+  top: 2px; left: 2px;
+  width: 16px; height: 16px;
+  border-radius: 50%;
+  background: var(--surface);
+  box-shadow: var(--lift-1);
+  transition: transform var(--t-base) var(--ease);
+}
+[aria-checked="true"] .sw { background: var(--accent); }
+[aria-checked="true"] .sw::after { transform: translateX(14px); }
+
+/* ══════════════ 三维锚定标注 ══════════════ */
+
+/*
+ * 钉在模型上的一枚圆点，点开摊出一张小签。位置每帧由 hud.updateSpots 写入。
+ * 必须 fixed —— 少了它，left/top 写了也不动，几枚点会叠在文档流的同一处。
+ */
+.spot {
+  position: fixed;
+  z-index: var(--z-nav);
+  display: grid;
+  place-items: center;
+  width: 26px; height: 26px;
+  margin: -13px 0 0 -13px;
+  border-radius: 50%;
+  font-family: var(--mono);
+  font-size: var(--fs-mark);
+  color: var(--on-accent);
+  background: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-faint), var(--lift-1);
+  transition: transform var(--t-fast) var(--ease), box-shadow var(--t-base) var(--ease);
+}
+.spot .ico { width: 15px; height: 15px; }
+@media (hover: hover) { .spot:hover { transform: scale(1.12); } }
+.spot[aria-pressed="true"] { box-shadow: 0 0 0 4px var(--accent-soft), var(--lift-2); }
+
+.spot-label {
+  position: fixed;
+  z-index: var(--z-nav);
+  transform: translateY(-50%);
+  max-width: 200px;
+  padding: var(--s2) var(--s3);
+  border-radius: var(--r-sm);
+  font-size: var(--fs-mini);
+  line-height: var(--lh-tight);
+  color: var(--text);
+  background: var(--surface);
+  box-shadow: var(--hair), var(--lift-2);
+  pointer-events: none;
+  animation: fade var(--t-fast) var(--ease) both;
+}
+.spot-label[data-side="left"] { transform: translate(-100%, -50%); }
+.spot-label small { display: block; margin-top: 2px; color: var(--text-3); }
+
+/* ══════════════ 窄屏 ══════════════ */
+
+@media (max-width: 900px) {
+  .side { width: min(268px, 40vw); top: calc(var(--pad-top) + 88px); }
+}
+
+/*
+ * 手机竖屏。右列整个落到底部条上方：一列 268px 宽的卡片压在 390px 的屏幕上，
+ * 车就只剩左边一条。说明卡改成从下往上展开，默认收着，顶栏那枚「为什么」开合它。
+ */
+@media (max-width: 720px) {
+  .topbar { padding-bottom: var(--s3); gap: var(--s2); }
+  .steptitle { font-size: var(--fs-base); }
+
+  .side {
+    left: var(--pad-left);
+    right: var(--pad-right);
+    top: auto;
+    bottom: calc(var(--bar-h, 0px) + var(--s2));
+    width: auto;
+    align-items: center;
+    justify-content: flex-end;
+    gap: var(--s2);
+  }
+  .note {
+    width: 100%;
+    margin-bottom: 0;
+    max-height: 38vh;
+    padding: var(--s4);
+    animation-name: note-up;
+  }
+  @keyframes note-up { from { opacity: 0; transform: translateY(10px); } }
+  .note-tab { display: inline-flex; }
+
+  .foot { padding-left: calc(var(--s3) + var(--sa-left) + 58px);
+          padding-right: calc(var(--s3) + var(--sa-right) + 58px); }
+  .nav-prev { left: calc(var(--s2) + var(--sa-left)); }
+  .nav-next { right: calc(var(--s2) + var(--sa-right)); }
+  .nav { width: 44px; height: 44px; }
+
+  .bolt-nm { display: none; }          /* 只留点，名字挤不下 */
+  .toast { top: 13%; font-size: var(--fs-tiny); }
+  .menu { top: auto; bottom: calc(var(--bar-h, 0px) + var(--s3)); left: var(--pad-left); right: var(--pad-right); }
+}
+
+/* 更窄一档：章节名换成只留进度轨。六个名字在 380px 以下会互相挤成省略号 */
+@media (max-width: 380px) {
+  .ch-nm { display: none; }
+  .rail { gap: var(--s2); }
+}
+
+/*
+ * 横过来的手机 —— 按高度判，不按宽度。
+ * 844×390 在宽度上跟平板一样宽，走的是桌面那一套；可它竖向只有 390，
+ * 顶上一行加底下一条能吃掉半屏，车就被挤成一条。这一档条子整体压薄。
+ */
+@media (max-height: 540px) and (orientation: landscape) {
+  .ch-nm { display: none; }
+  .topbar { padding-top: max(var(--s2), var(--sa-top)); padding-bottom: var(--s2); gap: var(--s2); }
+  .tick { height: 20px; }
+  .steptitle { font-size: var(--fs-base); }
+  .icon-btn, .chip { height: 38px; }
+  .icon-btn { width: 38px; }
+
+  .foot { gap: var(--s2); padding-bottom: max(var(--s2), var(--sa-bottom)); }
+  .cue { font-size: var(--fs-mini); padding: 5px var(--s3); }
+  .btn { min-height: 38px; padding: 0.4em 1.2em; }
+  .nav { width: 40px; height: 40px; }
+  .nav .ico { width: 20px; height: 20px; }
+
+  .side { top: calc(max(var(--s2), var(--sa-top)) + 62px); width: min(240px, 32vw); }
+  .note { padding: var(--s3) var(--s4); }
+  .dial { width: 64px; height: 44px; }
+  .gauge-goal { display: none; }
+  .toast { top: 8%; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gauge[data-state="ok"], .gauge[data-state="stripped"] { animation: none; }
+}

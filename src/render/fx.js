@@ -27,8 +27,12 @@ export class Fx {
     this.sparks = [];
   }
 
-  /** 一圈扩散的环，用于「这里到位了」。axis 是环所在平面的法线 */
-  ring(pos, axis = UP, { r0 = 0.01, r1 = 0.09, dur = 0.55 } = {}) {
+  /**
+   * 一圈扩散的环，用于「这里到位了」。axis 是环所在平面的法线。
+   * r1 由调用方按被标记那件东西的尺度给 —— 拧螺丝那几步的取景只有十几厘米宽，
+   * 一个固定 90 mm 的环会盖住半个画面。
+   */
+  ring(pos, axis = UP, { r0 = 0.002, r1 = 0.03, dur = 0.55 } = {}) {
     const geo = new THREE.RingGeometry(1, 1.06, 40);
     const m = new THREE.Mesh(geo, RING_MAT.clone());
     m.position.copy(pos);

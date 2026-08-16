@@ -1,0 +1,97 @@
+/* 重置、排印基线、焦点圈、减弱动效。画布与封面归 src/styles.css。 */
+
+*, *::before, *::after { box-sizing: border-box; }
+
+/*
+ * hidden 必须压过一切 display。
+ * 浏览器默认的 [hidden]{display:none} 与类选择器同级，写在后面的类会把它架空 ——
+ * 一个 display:flex 的满屏覆盖层就此变成隐形的挡板，吞掉所有点击。
+ */
+[hidden] { display: none !important; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  overflow: hidden;
+  overscroll-behavior: none;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--sans);
+  font-size: var(--fs-base);
+  line-height: var(--lh-body);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* 换主题时整页过渡，免得闪一下 */
+html, body {
+  transition: background-color var(--t-slow) var(--ease), color var(--t-slow) var(--ease);
+}
+
+h1, h2, h3, h4, p { margin: 0; }
+
+button {
+  font: inherit;
+  color: inherit;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+button:disabled { cursor: default; }
+
+a { color: inherit; }
+
+svg { display: block; }
+.ico { width: 1em; height: 1em; flex: none; stroke: currentColor; fill: none; }
+
+::selection { background: var(--accent-soft); }
+
+/* 键盘可见的焦点圈 —— 鼠标点击时不出现。2px 起步，暗场里 1px 看不见 */
+:focus { outline: none; }
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+  border-radius: var(--r-xs);
+}
+
+/* 细滚动条 */
+.scroll::-webkit-scrollbar { width: 3px; height: 3px; }
+.scroll::-webkit-scrollbar-thumb { background: var(--line); border-radius: var(--r-full); }
+.scroll { scrollbar-width: thin; scrollbar-color: var(--line) transparent; }
+
+/* 只给读屏看的一行 —— 不占版面，也不能被 display:none 藏掉（那样就不播报了） */
+.sr-only {
+  position: fixed; width: 1px; height: 1px;
+  margin: -1px; padding: 0; border: 0;
+  overflow: hidden; clip-path: inset(50%); white-space: nowrap;
+}
+
+/* 眉标：一行小字，交代「这是什么」 */
+.eyebrow {
+  font-size: var(--fs-mark);
+  letter-spacing: var(--ls-vast);
+  color: var(--text-3);
+}
+
+/* 数字一律等宽，且不等比 —— 扭矩表跳数时后面的单位不能跟着挪 */
+.num {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+}
+
+/*
+ * 减少动效。三维那一侧 CSS 管不到（方向箭头的呼吸、镜头缓动都是 JS 驱动的），
+ * 由各自读 util/tween.js 的 reducedMotion() 自行处理。
+ */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+    scroll-behavior: auto !important;
+  }
+}

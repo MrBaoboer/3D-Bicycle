@@ -167,15 +167,21 @@ export class Stage {
   }
 
   /**
-   * 装下一个包围球需要多远。
+   * 装下这一块需要多远。
+   *
    * 竖屏手机的水平视场只有十来度 —— 按垂直视场调好的距离，横过来一定裁边。
    * 两个方向各算一次，取远的那个。
+   *
+   * `d` 是主体沿视线方向的半深，可省。**近景不能省**：
+   * 主转点轴那一步主体长 211 mm 而机位只有 190 mm 远，最靠近相机的那个角
+   * 实际只有九十来毫米远，投影出来比按中心算的宽四成，右边整整裁掉 100 像素。
+   * 判据要落在**离相机最近的那一层**上，于是需要的距离就是「中心该有的距离 + 半深」。
    */
-  fitDistance({ r = 0, h = r }) {
+  fitDistance({ r = 0, h = r, d = 0 }) {
     const vHalf = (this.camera.fov * Math.PI) / 360;
     const hHalf = Math.atan(Math.tan(vHalf) * this.camera.aspect);
     const vFree = Math.atan(Math.tan(vHalf) * this.#viewport().frac);
-    return Math.max(h / Math.tan(vFree), r / Math.tan(hHalf));
+    return Math.max(h / Math.tan(vFree), r / Math.tan(hHalf)) + d;
   }
 
   /**
@@ -188,11 +194,18 @@ export class Stage {
    *   随便哪行提示换个字数，镜头就自己溜回去。
    */
   setRecommended(o = {}, { keepUser = false } = {}) {
-    const { az = 45, el = 18, dist = 3, target = new THREE.Vector3(), ease = 1.0, fit } = o;
+    const { az = 45, el = 18, dist, target = new THREE.Vector3(), ease = 1.0, fit } = o;
     this._lastFrame = { ...o, target };
     const t = target.clone();
 
-    const d = fit ? Math.max(dist, this.fitDistance(fit) * 1.06) : dist;
+    /*
+     * dist 是「宽画幅下的取景意图」，fit 是「必须完整看到多大一块」。
+     * 声明了 dist 就以它为下限，fit 只把相机再往后推 —— 宽屏上的取景意图原样保留。
+     * **没声明 dist 时由 fit 独自定距**：否则近景步骤会被一个默认值钉在整车距离上，
+     * 而 fit 从不拉近，把立特写就永远是一张整车照。
+     */
+    const fitD = fit ? this.fitDistance(fit) * 1.06 : undefined;
+    const d = fitD !== undefined ? Math.max(dist ?? 0, fitD) : (dist ?? 3);
 
     // 底部那条压掉一截画面 —— 把主体整体抬起来
     t.y -= 2 * d * Math.tan((this.camera.fov * Math.PI) / 360) * this.#viewport().lift;
@@ -238,9 +251,17 @@ export class Stage {
       if (!this.running) return;
       this._raf = requestAnimationFrame(loop);
       this.timer.update();
-      const dt = Math.min(this.timer.getDelta(), 0.05);
+      const raw = this.timer.getDelta();
+      // 补间与特效按 50 ms 封顶：一帧跳太多会把插值走过头，弹一下再回来
+      const dt = Math.min(raw, 0.05);
       const t = this.timer.getElapsed();
-      this.update(dt);
+      /*
+       * 相机的缓动另给一档 250 ms 的上限。
+       * 缓动系数是 1 − 0.001^(dt·ease)，按真实流逝的时间复合本来是帧率无关的；
+       * 可 dt 一旦被压到 50 ms，弱机上（实测软件渲染只有 2–3 fps）每秒就只推进
+       * 0.1–0.15 秒的量，换一步要几秒才到位 —— 越是卡的机器，镜头越慢。
+       */
+      this.update(Math.min(raw, 0.25));
       // 单个 updater 抛错不能连坐这一帧剩下的更新 —— 记录，继续走
       for (const u of this.updaters) {
         try { u(dt, t); } catch (e) { console.error('[updater]', e); }

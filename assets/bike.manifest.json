@@ -3,45 +3,552 @@
   "model": "public/models/CarbonFrameBike.glb",
   "frame": {
     "note": "全部坐标是 render/bike.js 加载完成后的世界坐标：已扶正前把 -40.212°、已把整车底面压到 y=0。长度单位 = 模型单位 = 1 米。",
-    "up": [0, 1, 0],
-    "forward": [-1, 0, 0],
-    "left": [0, 0, 1],
+    "up": [
+      0,
+      1,
+      0
+    ],
+    "forward": [
+      -1,
+      0,
+      0
+    ],
+    "left": [
+      0,
+      0,
+      1
+    ],
     "mmPerUnit": 1000
   },
   "parts": [
     {
-      "id": "front-wheel",
-      "name": "前轮",
-      "nodes": ["RadVorn"],
+      "id": "rear-pivot",
+      "name": "主转点轴",
+      "nodes": [
+        "RobertS2016_Rahmen_Hauptlager_Achse"
+      ],
       "install": {
         "kind": "slide",
-        "dir": [0, 1, 0],
-        "gap": 0.19,
+        "dir": [
+          0,
+          0,
+          -1
+        ],
+        "gap": 0.12,
+        "snap": 0.005
+      },
+      "fasten": [],
+      "needs": []
+    },
+    {
+      "id": "swingarm-left",
+      "name": "左摇臂",
+      "nodes": [
+        "RobertS2016_Rahmen_Schwinge_links"
+      ],
+      "install": {
+        "kind": "slide",
+        "dir": [
+          0,
+          0,
+          -1
+        ],
+        "gap": 0.16,
         "snap": 0.006
       },
-      "fasten": ["axle-front"],
+      "fasten": [],
+      "needs": [
+        "rear-pivot"
+      ]
+    },
+    {
+      "id": "swingarm-right",
+      "name": "右摇臂",
+      "nodes": [
+        "RobertS2016_Rahmen_Schwinge_rechts"
+      ],
+      "install": {
+        "kind": "slide",
+        "dir": [
+          0,
+          0,
+          1
+        ],
+        "gap": 0.16,
+        "snap": 0.006
+      },
+      "fasten": [],
+      "needs": [
+        "rear-pivot"
+      ]
+    },
+    {
+      "id": "shock",
+      "name": "后避震",
+      "nodes": [
+        "Daempfer_Cane-Creek_DB_200-57"
+      ],
+      "install": {
+        "kind": "slide",
+        "dir": [
+          -0.0757,
+          -0.9971,
+          0
+        ],
+        "gap": 0.16,
+        "snap": 0.006
+      },
+      "fasten": [],
+      "needs": [
+        "swingarm-left",
+        "swingarm-right"
+      ]
+    },
+    {
+      "id": "bash-guard",
+      "name": "下护板",
+      "nodes": [
+        "RobertS2016_Rahmen_Unterschutzplatte_Rockman_mini"
+      ],
+      "install": {
+        "kind": "slide",
+        "dir": [
+          0,
+          1,
+          0
+        ],
+        "gap": 0.12,
+        "snap": 0.005
+      },
+      "fasten": [],
       "needs": []
+    },
+    {
+      "id": "headset-lower",
+      "name": "下碗",
+      "nodes": [
+        "Steuersatz_un"
+      ],
+      "install": {
+        "kind": "slide",
+        "dir": [
+          0.4228,
+          0.9062,
+          0
+        ],
+        "gap": 0.1,
+        "snap": 0.004
+      },
+      "fasten": [],
+      "needs": []
+    },
+    {
+      "id": "headset-upper",
+      "name": "上碗",
+      "nodes": [
+        "Steuersatz_ob"
+      ],
+      "install": {
+        "kind": "slide",
+        "dir": [
+          -0.4228,
+          -0.9062,
+          0
+        ],
+        "gap": 0.1,
+        "snap": 0.004
+      },
+      "fasten": [],
+      "needs": []
+    },
+    {
+      "id": "fork",
+      "name": "前叉",
+      "nodes": [
+        "Federgabel",
+        "Federgabel_967_Body.4"
+      ],
+      "install": {
+        "kind": "slide",
+        "dir": [
+          0.4228,
+          0.9062,
+          0
+        ],
+        "gap": 0.2,
+        "snap": 0.006
+      },
+      "fasten": [],
+      "needs": [
+        "headset-lower",
+        "headset-upper"
+      ]
+    },
+    {
+      "id": "stem",
+      "name": "把立",
+      "nodes": [
+        "Vorbau_Hope_FR_35mm_27679"
+      ],
+      "install": {
+        "kind": "slide",
+        "dir": [
+          -0.4228,
+          -0.9062,
+          0
+        ],
+        "gap": 0.12,
+        "snap": 0.005
+      },
+      "fasten": [],
+      "needs": [
+        "fork"
+      ]
     },
     {
       "id": "handlebar",
       "name": "车把",
-      "nodes": ["Lenker 1", "Lenkergriff", "Lenkergriff 1", "Bremsgriff", "Bremsgriff 1"],
+      "nodes": [
+        "Lenker 1"
+      ],
       "install": {
         "kind": "slide",
-        "dir": [0.9062, -0.4228, 0],
+        "dir": [
+          0.9062,
+          -0.4228,
+          0
+        ],
         "gap": 0.16,
         "snap": 0.005
       },
-      "fasten": ["stem-face-a", "stem-face-b", "stem-face-c", "stem-face-d"],
+      "fasten": [
+        "stem-face-a",
+        "stem-face-b",
+        "stem-face-c",
+        "stem-face-d"
+      ],
+      "needs": [
+        "stem"
+      ]
+    },
+    {
+      "id": "grip-left",
+      "name": "左把套",
+      "nodes": [
+        "Lenkergriff"
+      ],
+      "install": {
+        "kind": "slide",
+        "dir": [
+          0,
+          0,
+          -1
+        ],
+        "gap": 0.1,
+        "snap": 0.004
+      },
+      "fasten": [],
+      "needs": [
+        "handlebar"
+      ]
+    },
+    {
+      "id": "grip-right",
+      "name": "右把套",
+      "nodes": [
+        "Lenkergriff 1"
+      ],
+      "install": {
+        "kind": "slide",
+        "dir": [
+          0,
+          0,
+          1
+        ],
+        "gap": 0.1,
+        "snap": 0.004
+      },
+      "fasten": [],
+      "needs": [
+        "handlebar"
+      ]
+    },
+    {
+      "id": "lever-left",
+      "name": "左刹把",
+      "nodes": [
+        "Bremsgriff 1"
+      ],
+      "install": {
+        "kind": "slide",
+        "dir": [
+          0,
+          0,
+          -1
+        ],
+        "gap": 0.1,
+        "snap": 0.004
+      },
+      "fasten": [],
+      "needs": [
+        "handlebar"
+      ]
+    },
+    {
+      "id": "lever-right",
+      "name": "右刹把",
+      "nodes": [
+        "Bremsgriff"
+      ],
+      "install": {
+        "kind": "slide",
+        "dir": [
+          0,
+          0,
+          1
+        ],
+        "gap": 0.1,
+        "snap": 0.004
+      },
+      "fasten": [],
+      "needs": [
+        "handlebar"
+      ]
+    },
+    {
+      "id": "chainring",
+      "name": "牙盘",
+      "nodes": [
+        "Kettenblatt_SRAM_directmount_26Z"
+      ],
+      "install": {
+        "kind": "slide",
+        "dir": [
+          0,
+          0,
+          1
+        ],
+        "gap": 0.1,
+        "snap": 0.004
+      },
+      "fasten": [],
       "needs": []
+    },
+    {
+      "id": "crank-right",
+      "name": "右曲柄",
+      "nodes": [
+        "Kurbel_X01_DH_re"
+      ],
+      "install": {
+        "kind": "slide",
+        "dir": [
+          0,
+          0,
+          1
+        ],
+        "gap": 0.14,
+        "snap": 0.005
+      },
+      "fasten": [],
+      "needs": [
+        "chainring"
+      ]
+    },
+    {
+      "id": "crank-left",
+      "name": "左曲柄",
+      "nodes": [
+        "Kurbel_X01_DH_li"
+      ],
+      "install": {
+        "kind": "slide",
+        "dir": [
+          0,
+          0,
+          -1
+        ],
+        "gap": 0.14,
+        "snap": 0.005
+      },
+      "fasten": [],
+      "needs": [
+        "chainring"
+      ]
+    },
+    {
+      "id": "rear-wheel",
+      "name": "后轮",
+      "nodes": [
+        "RadHinten"
+      ],
+      "install": {
+        "kind": "slide",
+        "dir": [
+          0,
+          1,
+          0
+        ],
+        "gap": 0.2,
+        "snap": 0.006
+      },
+      "fasten": [],
+      "needs": [
+        "swingarm-left",
+        "swingarm-right"
+      ]
+    },
+    {
+      "id": "front-wheel",
+      "name": "前轮",
+      "nodes": [
+        "RadVorn"
+      ],
+      "install": {
+        "kind": "slide",
+        "dir": [
+          0,
+          1,
+          0
+        ],
+        "gap": 0.19,
+        "snap": 0.006
+      },
+      "fasten": [
+        "axle-front"
+      ],
+      "needs": [
+        "fork"
+      ]
+    },
+    {
+      "id": "derailleur",
+      "name": "后拨",
+      "nodes": [
+        "Schaltwerk"
+      ],
+      "install": {
+        "kind": "slide",
+        "dir": [
+          0,
+          0,
+          1
+        ],
+        "gap": 0.1,
+        "snap": 0.004
+      },
+      "fasten": [],
+      "needs": [
+        "swingarm-right"
+      ]
+    },
+    {
+      "id": "chain",
+      "name": "链条",
+      "nodes": [
+        "RobertS2016_Kette"
+      ],
+      "install": {
+        "kind": "slide",
+        "dir": [
+          0,
+          0,
+          1
+        ],
+        "gap": 0.1,
+        "snap": 0.004
+      },
+      "fasten": [],
+      "needs": [
+        "chainring",
+        "derailleur",
+        "rear-wheel"
+      ]
+    },
+    {
+      "id": "caliper-front",
+      "name": "前刹卡钳",
+      "nodes": [
+        "Magura_MT7 1"
+      ],
+      "install": {
+        "kind": "slide",
+        "dir": [
+          0,
+          0,
+          -1
+        ],
+        "gap": 0.1,
+        "snap": 0.004
+      },
+      "fasten": [],
+      "needs": [
+        "fork",
+        "front-wheel"
+      ]
+    },
+    {
+      "id": "caliper-rear",
+      "name": "后刹卡钳",
+      "nodes": [
+        "Magura_MT7"
+      ],
+      "install": {
+        "kind": "slide",
+        "dir": [
+          0,
+          0,
+          -1
+        ],
+        "gap": 0.1,
+        "snap": 0.004
+      },
+      "fasten": [],
+      "needs": [
+        "swingarm-left",
+        "rear-wheel"
+      ]
+    },
+    {
+      "id": "hoses",
+      "name": "刹车油管",
+      "nodes": [
+        "Schlauch_01",
+        "Schlauch_02",
+        "Schlauch_03",
+        "Schlauch_04"
+      ],
+      "install": {
+        "kind": "slide",
+        "dir": [
+          0,
+          0,
+          -1
+        ],
+        "gap": 0.06,
+        "snap": 0.003
+      },
+      "fasten": [],
+      "needs": [
+        "lever-left",
+        "lever-right",
+        "caliper-front",
+        "caliper-rear"
+      ]
     },
     {
       "id": "seatpost",
       "name": "座管与座垫",
-      "nodes": ["Sattelstange"],
+      "nodes": [
+        "Sattelstange"
+      ],
       "install": {
         "kind": "slide",
-        "dir": [-0.5142, -0.8577, 0],
+        "dir": [
+          -0.5142,
+          -0.8577,
+          0
+        ],
         "gap": 0.22,
         "snap": 0.005
       },
@@ -49,38 +556,74 @@
       "needs": []
     },
     {
-      "id": "pedal-left",
-      "name": "左脚踏",
-      "nodes": ["Pedal_Funn_Bigfoot_le"],
-      "install": {
-        "kind": "thread",
-        "dir": [0, 0, -1],
-        "gap": 0.12,
-        "snap": 0.004
-      },
-      "pivot": {
-        "point": [0.0463, 0.3083, 0.091],
-        "axis": [0, 0, 1]
-      },
-      "fasten": ["pedal-left-spindle"],
-      "needs": []
-    },
-    {
       "id": "pedal-right",
       "name": "右脚踏",
-      "nodes": ["Pedal_Funn_Bigfoot_re"],
+      "nodes": [
+        "Pedal_Funn_Bigfoot_re"
+      ],
       "install": {
         "kind": "thread",
-        "dir": [0, 0, 1],
+        "dir": [
+          0,
+          0,
+          1
+        ],
         "gap": 0.12,
         "snap": 0.004
       },
+      "fasten": [
+        "pedal-right-spindle"
+      ],
+      "needs": [
+        "crank-right"
+      ],
       "pivot": {
-        "point": [0.3217, 0.4902, -0.091],
-        "axis": [0, 0, 1]
+        "point": [
+          0.3217,
+          0.4902,
+          -0.091
+        ],
+        "axis": [
+          0,
+          0,
+          1
+        ]
+      }
+    },
+    {
+      "id": "pedal-left",
+      "name": "左脚踏",
+      "nodes": [
+        "Pedal_Funn_Bigfoot_le"
+      ],
+      "install": {
+        "kind": "thread",
+        "dir": [
+          0,
+          0,
+          -1
+        ],
+        "gap": 0.12,
+        "snap": 0.004
       },
-      "fasten": ["pedal-right-spindle"],
-      "needs": []
+      "fasten": [
+        "pedal-left-spindle"
+      ],
+      "needs": [
+        "crank-left"
+      ],
+      "pivot": {
+        "point": [
+          0.0463,
+          0.3083,
+          0.091
+        ],
+        "axis": [
+          0,
+          0,
+          1
+        ]
+      }
     }
   ],
   "fasteners": [
@@ -92,10 +635,21 @@
       "spec": "M14x1.5",
       "pitch": 1.5,
       "turns": 6,
-      "torque": [10, 15],
+      "torque": [
+        10,
+        15
+      ],
       "strip": 25,
-      "axis": [0, 0, -1],
-      "point": [-0.5661, 0.4268, 0.055],
+      "axis": [
+        0,
+        0,
+        -1
+      ],
+      "point": [
+        -0.5661,
+        0.4268,
+        0.0443
+      ],
       "group": "axle-front",
       "order": "any"
     },
@@ -107,10 +661,21 @@
       "spec": "M14x1.25",
       "pitch": 1.25,
       "turns": 8,
-      "torque": [35, 40],
+      "torque": [
+        35,
+        40
+      ],
       "strip": 55,
-      "axis": [0, 0, -1],
-      "point": [0.0463, 0.3083, 0.091],
+      "axis": [
+        0,
+        0,
+        -1
+      ],
+      "point": [
+        0.0463,
+        0.3083,
+        0.091
+      ],
       "group": "pedal",
       "order": "any"
     },
@@ -122,10 +687,21 @@
       "spec": "M14x1.25",
       "pitch": 1.25,
       "turns": 8,
-      "torque": [35, 40],
+      "torque": [
+        35,
+        40
+      ],
       "strip": 55,
-      "axis": [0, 0, 1],
-      "point": [0.3217, 0.4902, -0.091],
+      "axis": [
+        0,
+        0,
+        1
+      ],
+      "point": [
+        0.3217,
+        0.4902,
+        -0.091
+      ],
       "group": "pedal",
       "order": "any"
     },
@@ -137,10 +713,21 @@
       "spec": "M5x0.8",
       "pitch": 0.8,
       "turns": 6,
-      "torque": [5, 6],
+      "torque": [
+        5,
+        6
+      ],
       "strip": 10,
-      "axis": [0.9062, -0.4228, 0],
-      "point": [-0.2457, 1.077, 0.018],
+      "axis": [
+        0.9062,
+        -0.4228,
+        0
+      ],
+      "point": [
+        -0.2583,
+        1.0829,
+        0.018
+      ],
       "group": "stem-face",
       "order": "cross"
     },
@@ -152,10 +739,21 @@
       "spec": "M5x0.8",
       "pitch": 0.8,
       "turns": 6,
-      "torque": [5, 6],
+      "torque": [
+        5,
+        6
+      ],
       "strip": 10,
-      "axis": [0.9062, -0.4228, 0],
-      "point": [-0.2583, 1.0498, -0.018],
+      "axis": [
+        0.9062,
+        -0.4228,
+        0
+      ],
+      "point": [
+        -0.2709,
+        1.0557,
+        -0.018
+      ],
       "group": "stem-face",
       "order": "cross"
     },
@@ -167,10 +765,21 @@
       "spec": "M5x0.8",
       "pitch": 0.8,
       "turns": 6,
-      "torque": [5, 6],
+      "torque": [
+        5,
+        6
+      ],
       "strip": 10,
-      "axis": [0.9062, -0.4228, 0],
-      "point": [-0.2457, 1.077, -0.018],
+      "axis": [
+        0.9062,
+        -0.4228,
+        0
+      ],
+      "point": [
+        -0.2583,
+        1.0829,
+        -0.018
+      ],
       "group": "stem-face",
       "order": "cross"
     },
@@ -182,10 +791,21 @@
       "spec": "M5x0.8",
       "pitch": 0.8,
       "turns": 6,
-      "torque": [5, 6],
+      "torque": [
+        5,
+        6
+      ],
       "strip": 10,
-      "axis": [0.9062, -0.4228, 0],
-      "point": [-0.2583, 1.0498, 0.018],
+      "axis": [
+        0.9062,
+        -0.4228,
+        0
+      ],
+      "point": [
+        -0.2709,
+        1.0557,
+        0.018
+      ],
       "group": "stem-face",
       "order": "cross"
     }

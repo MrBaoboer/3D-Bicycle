@@ -1,0 +1,48 @@
+name: 部署到 GitHub Pages
+
+# 推到 main 就发一版。也可以在 Actions 页面手动触发。
+# 首次使用前要在仓库 Settings → Pages 里把 Source 选成 GitHub Actions。
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# 同时只跑一个部署；排队中的旧的直接作废，但正在跑的那个让它跑完
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  构建:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22.13'
+          cache: npm
+      # 这一步不起浏览器，省掉 Playwright 内核的下载
+      - run: npm ci
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
+      - run: npm run build
+      - uses: actions/configure-pages@v5
+      # 产物里有一份 12 MB 的整车 GLB，一并发上去
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  部署:
+    needs: 构建
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.pages.outputs.page_url }}
+    steps:
+      - id: pages
+        uses: actions/deploy-pages@v4

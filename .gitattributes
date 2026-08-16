@@ -1,0 +1,13 @@
+# 文本一律以 LF 存进库里，检出时交给各平台的 core.autocrlf
+* text=auto eol=lf
+
+# 二进制：别做行尾转换，也别在 diff 里展开
+*.glb   binary
+*.png   binary
+*.jpg   binary
+*.ktx2  binary
+
+# 产物与锁文件不参与 GitHub 的语言统计
+dist/**            linguist-generated
+package-lock.json  linguist-generated
+LICENSE            linguist-language=Text

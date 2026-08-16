@@ -3,13 +3,13 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "网购自行车整车 · 开箱组装的 3D 分步交互说明书",
+  "description": "整车从零组装 · 3D 分步交互说明书",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
     "lint": "eslint .",
-    "test": "node --test tools/unit.test.mjs",
+    "test": "node --test tools/unit.test.mjs tools/bom.test.mjs",
     "model": "node tools/glb-tree.mjs public/models/CarbonFrameBike.glb",
     "verify": "node tools/check-manifest.mjs",
     "check:code": "npm run lint && npm test && npm run verify && npm run build",
@@ -28,5 +28,15 @@
     "globals": "^17.9.0",
     "playwright": "^1.62.1",
     "vite": "^8.2.1"
+  },
+  "license": "AGPL-3.0-only",
+  "author": "MrBaoboer",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/MrBaoboer/3d-bicycle.git"
+  },
+  "homepage": "https://3d-bicycle.vercel.app",
+  "bugs": {
+    "url": "https://github.com/MrBaoboer/3d-bicycle/issues"
   }
 }

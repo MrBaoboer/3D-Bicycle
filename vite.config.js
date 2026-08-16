@@ -31,6 +31,39 @@ const devShot = () => ({
   },
 });
 
+/**
+ * 内容安全策略，**只进生产产物**。
+ *
+ * 这个页面不取任何外部资源：脚本与样式是打包出来的、模型在 public/ 下同源、
+ * 音效是 Web Audio 现场合成的、图标是内联 SVG。既然如此，把门关死没有代价。
+ * data: 留给首页那枚 SVG favicon。
+ *
+ * 不能写进 index.html —— 开发期 Vite 靠动态 <style> 注样式，
+ * `style-src 'self'` 会把它整个挡下来，`npm run dev` 当场白屏。
+ */
+const CSP = [
+  "default-src 'self'",
+  // GLTFLoader 把 GLB 里的贴图切成 blob: 再取回来 —— 少了这一条，整车加载到贴图那步直接断
+  "connect-src 'self' blob:",
+  "img-src 'self' data: blob:",
+  "object-src 'none'",
+  "base-uri 'self'",
+  "form-action 'none'",
+].join('; ');
+
+const csp = () => ({
+  name: 'csp',
+  apply: 'build',
+  transformIndexHtml: (html) => ({
+    html,
+    tags: [{
+      tag: 'meta',
+      attrs: { 'http-equiv': 'Content-Security-Policy', content: CSP },
+      injectTo: 'head-prepend',
+    }],
+  }),
+});
+
 /*
  * 产物用相对路径，放子路径下不用改配置。
  * three 单独切一个 chunk —— 它比其余全部代码加起来还大。
@@ -39,7 +72,7 @@ const devShot = () => ({
  */
 export default defineConfig({
   base: './',
-  plugins: [devShot()],
+  plugins: [devShot(), csp()],
   build: {
     target: 'es2022',
     assetsInlineLimit: 0,        // 模型与解码器一律走文件，不要内联进 JS

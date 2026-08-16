@@ -15,7 +15,6 @@ const KEY = 'bike.v1.state';
 const PREFS = {
   theme: 'light',
   sound: true,
-  captions: true,
   primed: false,          // 是否看过「怎么操作」
   torqueUnit: 'nm',       // nm / lbft —— 扭矩单位，北美用户习惯 lb·ft
 };
@@ -29,10 +28,20 @@ const RUN = {
   crossOrderOk: null,     // 面盖是否按对角顺序拧的
 };
 
-const DEFAULTS = { ...PREFS, ...RUN };
+/**
+ * 取一份全新的进度。
+ *
+ * **必须现拷一层。** `{ ...RUN }` 只复制引用，于是 `state.installed` 一开始
+ * 就是 `RUN.installed` 本人；哪一处顺手写了 `state.installed[id] = true`
+ * （原来 slide 到位时正是这么写的），这份模板就被就地改脏了，
+ * 之后每一次「从头再来」都从脏模板复制 —— 装过的件永远清不掉。
+ */
+const freshRun = () => Object.fromEntries(
+  Object.entries(RUN).map(([k, v]) => [k, v && typeof v === 'object' ? { ...v } : v]),
+);
 
 function load() {
-  const s = { ...DEFAULTS };
+  const s = { ...PREFS, ...freshRun() };
   try {
     const raw = localStorage.getItem(KEY);
     if (raw) {
@@ -79,9 +88,7 @@ export function onStateChange(fn) {
 
 /** 从头再来：这一遍的进度归零，偏好一概不动 */
 export function resetRun() {
-  for (const [k, v] of Object.entries(RUN)) {
-    state[k] = (v && typeof v === 'object') ? { ...v } : v;
-  }
+  for (const [k, v] of Object.entries(freshRun())) state[k] = v;
 }
 
 /** N·m → 显示字符串，跟随偏好 */
