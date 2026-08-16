@@ -1,8 +1,8 @@
 blank_issues_enabled: true
 contact_links:
   - name: 安全问题
-    url: https://github.com/MrBaoboer/3D-Bicycle/security/advisories/new
+    url: https://github.com/MrBaoboer/3D-Bike-Builder/security/advisories/new
     about: 走私密披露，不要开公开 Issue。范围见 SECURITY.md
   - name: 商业授权
-    url: https://github.com/MrBaoboer/3D-Bicycle/blob/main/COMMERCIAL.md
+    url: https://github.com/MrBaoboer/3D-Bike-Builder/blob/main/COMMERCIAL.md
     about: 授权分三层，其中整车模型那一层不归维护者管 —— 先看这一份

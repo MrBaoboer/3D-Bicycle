@@ -86,17 +86,21 @@
       "id": "shock",
       "name": "后避震",
       "nodes": [
-        "Daempfer_Cane-Creek_DB_200-57"
+        "Daempfer_Cane-Creek_DB_200-57",
+        "Daempfer_Cane-Creek_DB_200-57_30305",
+        "Daempfer_Cane-Creek_DB_200-57_148918",
+        "Daempfer_Cane-Creek_DB_200-57_149470"
       ],
       "install": {
         "kind": "slide",
         "dir": [
-          -0.0757,
-          -0.9971,
+          -0.063,
+          -0.998,
           0
         ],
         "gap": 0.09,
-        "snap": 0.006
+        "snap": 0.006,
+        "note": "四个节点是一根避震：模型按悬挂动画的需要把它拆在了两个父级下 —— 主体与下眼（含下眼两侧的衬套）挂在摇臂的连杆 Schwinge_Verbinder 上，上眼那一段与上眼两侧的衬套挂在主车架 Hauptrahmen 上。只认头一个的话，另外三个会一直留在车架上：「从一根车架开始」那一步的光车架上挂着一截黑筒，到了这一步又凭空掉下来半根避震。dir 是两个眼孔连线（上眼 [0.2656,0.7511,0]、下眼 [0.2530,0.5514,0]，间距 200.1 mm，正是 DB 200-57 的标称眼距）"
       },
       "fasten": [],
       "needs": [

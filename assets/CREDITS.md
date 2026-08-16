@@ -15,12 +15,10 @@
 - 本仓库内文件：`public/models/CarbonFrameBike.glb`
 - SHA-256 前 16 位：`95c016737df48d1b`，12,183,440 字节
 
-选用未压缩的 `glTF-Binary` 而非同目录下 3.24 MB 的 `glTF-Draco-KTX2`，
-理由是后者的 KTX2 走 ETC1S 档，而这份资产 11 张贴图里有 7 张是法线贴图 ——
-ETC1S 的码本按感知颜色优化，压方向向量会在曲面上留下着色不连续。
-低配档另行用 UASTC 自行转制，不使用上游的 ETC1S 版本。
+取的是未压缩的 `glTF-Binary`，不是同目录下 3.24 MB 的 `glTF-Draco-KTX2`，
+理由见 [docs/DEVELOPMENT.md](../docs/DEVELOPMENT.md#模型)。
 
-### CC BY-SA 4.0 的影响
+## CC BY-SA 4.0 的影响
 
 ShareAlike 只对**该模型及其改作**生效：本仓库对模型所做的任何修改
 （重新导出、减面、贴图转码）同样以 CC BY-SA 4.0 发布。

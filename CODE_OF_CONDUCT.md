@@ -47,5 +47,4 @@
 改编自 [Contributor Covenant](https://www.contributor-covenant.org) 3.0，
 分级处理的思路取自 Mozilla 的社区参与准则。
 
-本文件以 CC BY-SA 4.0 授权（不带 NC），与项目内容层的授权不同 ——
-行为准则本来就该能被自由取用。
+本文件以 CC BY-SA 4.0 授权（不带 NC），与项目内容层的授权不同。

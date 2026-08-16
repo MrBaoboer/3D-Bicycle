@@ -20,6 +20,9 @@ const OUT = join(ROOT, 'docs', 'shots');
 
 const DESK = { width: 1440, height: 900 };
 const PHONE = { width: 390, height: 844 };
+// README 顶上那一张：宽幅、不带界面，只有车。16:10 的整幅截图当页首太高，
+// 一屏读不完就失去了「一眼看见」的意思
+const HERO = { width: 1600, height: 780 };
 
 /** 等镜头走到位 */
 const settled = (page) => page.waitForFunction(() => {
@@ -68,6 +71,32 @@ async function at(page, id, { finish = true } = {}) {
   await page.waitForTimeout(900);
 }
 
+/**
+ * 藏掉全部界面，把整幅画面还给车，再留一圈余白。
+ *
+ * 顶栏与底栏走应用自带的 `data-quiet` —— 它同时把这两条排除出安全区，
+ * 于是 stage 会重新取景、用满整幅。改 dataset 不触发 ResizeObserver，补发一次 resize。
+ * 标注圆点每帧都由 `updateSpots` 重写 `style.display`，藏不住，得整个摘掉。
+ *
+ * 取景是按「看得清」定的，贴边贴得紧。门面那张要的是橱窗，所以把距离再推远一档：
+ * `dist` 是取景距离的下限，给足了它就盖过 fit 算出来的那个数。
+ */
+async function bare(page, pad = 1.18) {
+  await page.evaluate((k) => {
+    const c = window.__ctx, hud = document.querySelector('.hud');
+    c.hud.clearSpots();
+    hud.querySelector('.topbar').dataset.quiet = '1';
+    hud.querySelector('.foot').dataset.quiet = '1';
+    for (const el of hud.querySelectorAll('.nav, .side, .tag')) el.style.display = 'none';
+    dispatchEvent(new Event('resize'));
+    const s = c.stage;
+    s.setRecommended({ ...s._lastFrame, dist: s.recommend.dist * k }, { keepUser: true });
+    s.snapToRecommended();
+  }, pad);
+  await settled(page);
+  await page.waitForTimeout(600);
+}
+
 const shot = (page, name) => page.screenshot({ path: join(OUT, `${name}.png`) });
 
 if (!existsSync(join(DIST, 'index.html'))) {
@@ -79,21 +108,31 @@ const { server, port } = await serve(DIST);
 const browser = await chromium.launch();
 
 try {
-  // ── 01 封面：读完模型、车摆进右半边的那一刻 ──
-  let page = await open(browser, DESK, port);
-  await shot(page, '01-cover');
+  /*
+   * ── 01 门面：装完的整车，宽幅，不带界面 ──
+   *
+   * 早先这里截的是封面 —— 读模型那几秒的挡板，车在毛玻璃后面糊成一团。
+   * 那是「还没开始」的样子，放在 README 第一屏等于先给人看一张失焦的图。
+   *
+   * 摊开态试过，宽幅里不成立：那二十七件的位移是按 16:10 算的，
+   * 铺到 20:9 上就散了 —— 中间挤成一团，右边孤零零飘着一件。
+   * 整车是一个整体，横过来只是四周余白更宽，正好是橱窗要的样子。
+   */
+  let page = await open(browser, HERO, port);
   await enter(page);
+  await at(page, 'A1');
+  await bare(page);
+  await shot(page, '01-hero');
+  await page.close();
 
   // ── 02 拆开看看：二十七个大件各自停在它该来的那一侧 ──
+  page = await open(browser, DESK, port);
+  await enter(page);
   await at(page, 'A2');
   await shot(page, '02-exploded');
 
-  // ── 03 主转点轴：近景带着周围的车架，看得出这是车上的哪儿 ──
-  await at(page, 'B1', { finish: false });
-  await shot(page, '03-pivot');
-
   /*
-   * 04 四颗面盖螺丝：一对对角已经拧上，第三颗正拧到一半。
+   * ── 03 四颗面盖螺丝：一对对角已经拧上，第三颗正拧到一半 ──
    *
    * 不能靠「跑起来再等几秒」撞这一帧 —— 自动拧一颗只要一秒出头，
    * 而截图本身就要一百毫秒。所以头两颗照常自动拧完，
@@ -109,9 +148,9 @@ try {
     c.screw._turn(f.turns * Math.PI * 2 * 0.6);
   });
   await page.waitForTimeout(700);
-  await shot(page, '04-cross-tighten');
+  await shot(page, '03-cross-tighten');
 
-  // ── 05 出门前自检：三十四行逐条对账 ──
+  // ── 05 出门前自检：三十四行逐条对账。要先把全程走完，所以留在这一页最后 ──
   await page.evaluate(async () => {
     const c = window.__ctx, e = window.__engine;
     await c.hud.onRestart();
@@ -129,18 +168,18 @@ try {
   await shot(page, '05-tally');
   await page.close();
 
-  // ── 06 深色：左脚踏反牙那一步 ──
+  // ── 04 深色：左脚踏反牙那一步。一张图同时说清签名交互与深色主题 ──
   page = await open(browser, DESK, port, 'dark');
   await enter(page);
   await at(page, 'H3');
-  await shot(page, '06-dark');
+  await shot(page, '04-dark');
   await page.close();
 
-  // ── 07 手机竖屏：界面退到四周，中间整片留给车 ──
+  // ── 06 手机竖屏：界面退到四周，中间整片留给车 ──
   page = await open(browser, PHONE, port);
   await enter(page);
   await at(page, 'F2', { finish: false });
-  await shot(page, '07-mobile');
+  await shot(page, '06-mobile');
   await page.close();
 
   console.log(`截好了 → ${OUT}`);

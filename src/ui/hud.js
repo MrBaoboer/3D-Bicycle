@@ -253,14 +253,23 @@ export class HUD {
      * 右边那一列。判据同样用几何而不是元素身份：贴着右缘、且高得能挡住主体，
      * 才算「右边被占掉了」。窄屏上这一列是横铺在底部的，左沿落在屏幕左半边，
      * 这一条自然不成立 —— 它已经算进 bottom 里了，再算一次会让车横着缩一半。
+     *
+     * **按它真正盖住的那几行折算，不按它的宽度全额算。**
+     * 让位有两件事：别被盖住，以及落在剩下那块的正中。一张摆在右上角、
+     * 只有一百七十像素高的说明卡，第一件事早就成立了 —— 主体在它下方半屏处，
+     * 根本碰不着；可全额算的话第二件事会把主体整整推左 166 像素，
+     * 而那正是「螺丝没在画面正中」的来源：面盖那四颗因此偏出屏幕中线 215 像素。
+     * 乘上「卡片高 ÷ 可用画面高」之后，一条从头到脚的侧栏仍然全额让位，
+     * 右上角那张小卡只让掉它真正占着的那一档。
      */
+    const freeH = Math.max(1, vh - top - bottom);
     let right = 0;
     for (const el of [this.el.note, this.el.readout]) {
       const r = box(el);
       if (!r || !r.height) continue;
       if (r.left < innerWidth * 0.6 || innerWidth - r.right > 48) continue;
       if (r.height < vh * 0.12) continue;
-      right = Math.max(right, innerWidth - r.left);
+      right = Math.max(right, (innerWidth - r.left) * Math.min(1, r.height / freeH));
     }
 
     const next = { top: Math.round(top), bottom: Math.round(bottom), left: 0, right: Math.round(right) };
