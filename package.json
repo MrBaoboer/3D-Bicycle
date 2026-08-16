@@ -1,5 +1,5 @@
 {
-  "name": "3d-bicycle",
+  "name": "3d-bike-builder",
   "private": true,
   "version": "0.1.0",
   "type": "module",
@@ -17,8 +17,7 @@
     "shots": "node tools/shots.mjs",
     "frames": "node tools/frame-audit.mjs",
     "check": "npm run check:code && npm run smoke",
-    "live": "node tools/live-check.mjs",
-    "alias": "node tools/vercel-alias.mjs"
+    "live": "node tools/live-check.mjs"
   },
   "engines": {
     "node": "^22.13.0 || >=24.0.0"
@@ -37,10 +36,10 @@
   "author": "MrBaoboer",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/MrBaoboer/3D-Bicycle.git"
+    "url": "git+https://github.com/MrBaoboer/3D-Bike-Builder.git"
   },
-  "homepage": "https://3d-bicycle.vercel.app",
+  "homepage": "https://build-bike.vercel.app",
   "bugs": {
-    "url": "https://github.com/MrBaoboer/3D-Bicycle/issues"
+    "url": "https://github.com/MrBaoboer/3D-Bike-Builder/issues"
   }
 }
