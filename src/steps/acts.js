@@ -276,17 +276,17 @@ export function acts(ctx) {
     P({
       id: 'D3',
       phase: 3,
-      title: '两只把套',
-      parts: ['grip-left', 'grip-right'],
-      cue: '把套从两端推到底',
+      title: '两只刹把',
+      parts: ['lever-left', 'lever-right'],
+      cue: '刹把从两端滑到把套内侧',
       pad: 1.1,
     }),
     P({
       id: 'D4',
       phase: 3,
-      title: '两只刹把',
-      parts: ['lever-left', 'lever-right'],
-      cue: '刹把从两端滑到把套内侧',
+      title: '两只把套',
+      parts: ['grip-left', 'grip-right'],
+      cue: '把套从两端推到底',
       pad: 1.1,
     }),
 

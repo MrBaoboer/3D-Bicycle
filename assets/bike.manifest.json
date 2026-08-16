@@ -95,7 +95,7 @@
           -0.9971,
           0
         ],
-        "gap": 0.16,
+        "gap": 0.09,
         "snap": 0.006
       },
       "fasten": [],
@@ -117,7 +117,7 @@
           1,
           0
         ],
-        "gap": 0.12,
+        "gap": 0.07,
         "snap": 0.005
       },
       "fasten": [],
@@ -197,7 +197,7 @@
           -0.9062,
           0
         ],
-        "gap": 0.12,
+        "gap": 0.07,
         "snap": 0.005
       },
       "fasten": [],
@@ -249,7 +249,8 @@
       },
       "fasten": [],
       "needs": [
-        "handlebar"
+        "handlebar",
+        "lever-left"
       ]
     },
     {
@@ -270,7 +271,8 @@
       },
       "fasten": [],
       "needs": [
-        "handlebar"
+        "handlebar",
+        "lever-right"
       ]
     },
     {
@@ -550,7 +552,7 @@
           -0.8577,
           0
         ],
-        "gap": 0.22,
+        "gap": 0.11,
         "snap": 0.005
       },
       "fasten": [],

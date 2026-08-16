@@ -152,6 +152,17 @@
 :root {
   /* ── 字 ───────────────────────────────────────── */
   --sans: "PingFang SC", "HarmonyOS Sans SC", "Noto Sans SC", "Microsoft YaHei", system-ui, sans-serif;
+  /*
+   * 封面标题单独一套。正文那一栈以「哪儿都有」为先，而标题只出现一次，
+   * 值得把各平台上最好看的那几款排在前面：苹方（macOS / iOS）、
+   * 鸿蒙黑体与小米 MiSans（新一代国产屏显黑体，字面更方、重心更稳）、
+   * 思源黑体，最后才落到微软雅黑。
+   * **不引外部字体** —— 产物的 CSP 是 default-src 'self'，加载不了；
+   * 而为十二个字打包一份子集字体，维护成本不值。
+   */
+  --display: "PingFang SC", "HarmonyOS Sans SC", "MiSans", "Source Han Sans SC",
+    "Source Han Sans CN", "Noto Sans SC", "Microsoft YaHei UI", "Microsoft YaHei",
+    system-ui, sans-serif;
   /* 圈数、步骤号 —— 一切会跳动的数字都走等宽，跳的时候不推着旁边的字走 */
   --mono: "SFMono-Regular", "JetBrains Mono", "Cascadia Mono", Consolas, monospace;
 

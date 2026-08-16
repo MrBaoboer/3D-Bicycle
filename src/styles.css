@@ -62,11 +62,18 @@
  */
 .cover-t {
   margin: 0;
+  font-family: var(--display);
   font-size: clamp(30px, 5.2vw, 52px);
   font-weight: 500;
-  letter-spacing: 0.06em;
-  line-height: 1.28;
+  /* 中文标题的字距要比正文松一档，但不能松到断开词组；0.08em 是这一档的上限 */
+  letter-spacing: 0.08em;
+  /* 字距是加在每个字右侧的，行末会多出一格 —— 抵掉，标题才是真的居中 */
+  text-indent: 0.08em;
+  line-height: 1.34;
   color: var(--text);
+  /* 大字号下开启视觉字重优化与更细的抗锯齿，边缘不发糊 */
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
 .cover-bar {

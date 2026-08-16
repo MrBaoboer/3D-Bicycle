@@ -63,10 +63,15 @@ export function partCenter(ctx, partId) {
  *   主体一大，撑开画幅的那几个角并不在最靠近相机的那一层上，全额补会白白退远一米。
  *   toward：画面要往哪一边偏一点，见下。span：整车半径，偏多少按主体与它的比例缩放。
  */
-function aimAt(boxes, { az, el, pad = 1, depth = 1, toward = null, span = 0 }) {
+function aimAt(boxes, { az, el, pad = 1, depth = 1, toward = null, span = 0, at = null }) {
   const all = new Box3();
   for (const b of boxes) if (!b.isEmpty()) all.union(b);
-  const c = all.getCenter(new Vector3());
+  /*
+   * 默认对准整段包络的中点；给了 at 就对准 at，而半跨度仍按新中心重量 ——
+   * 于是「主体落在画面正中」与「整段行程都在画面里」两件事同时成立，
+   * 代价只是镜头退远一点。
+   */
+  const c = at ? at.clone() : all.getCenter(new Vector3());
 
   const ar = (az * Math.PI) / 180;
   const er = (el * Math.PI) / 180;
@@ -204,16 +209,50 @@ function nodeBoxes(ctx, name) {
  */
 export function frameOf(ctx, parts, { pad = PAD, extra = [], az = 45, el = 16 } = {}) {
   const boxes = [];
+  const ends = [new Box3(), new Box3()];
   for (const id of parts) {
     for (const u of [0, 1]) {
       ctx.slide.park(id, u);
-      for (const n of ctx.bom.nodesOf(id)) boxes.push(...nodeBoxes(ctx, n));
+      for (const n of ctx.bom.nodesOf(id)) {
+        const bs = nodeBoxes(ctx, n);
+        boxes.push(...bs);
+        for (const b of bs) ends[u].union(b);
+      }
     }
     ctx.slide.park(id, 1);
   }
   for (const p of extra) boxes.push(new Box3().setFromPoints([p]));
   const bike = bikeRef(ctx);
-  const { target, fit } = aimAt(boxes, { az, el, pad, toward: bike.center, span: bike.radius });
+
+  /*
+   * **中心偏向预备位，不是整段行程的中点。**
+   *
+   * 这一步的取景本来就是按整段行程量的，而件本身常常比行程还小 ——
+   * 于是「半个画幅」差不多就等于「半段行程」，件停在行程的哪一头都贴着画幅边。
+   * 实测对准中点时，向下装的那几件（后避震、把立、座管）偏出可用画面半高
+   * 0.75–1.04，也就是压在画幅上沿上：「这一步要看的东西在舞台中央」完全不成立。
+   *
+   * 而**进场那一刻件停在预备位**，那才是用户第一眼看的地方。所以锚点从预备位
+   * 出发、只往装配位挪四分之一：进场时件落在中心附近（实测偏心降到 0.2 上下），
+   * 装到位之后它落在画幅另一侧靠边处 —— 那时这一步已经讲完了。
+   *
+   * 半跨度是按新锚点重量的，所以整段行程仍然全在画面里，只是镜头退远一点。
+   */
+  const ANCHOR_TO_SEAT = 0.10;
+  const anchor = ends[0].isEmpty() || ends[1].isEmpty() ? null
+    : ends[0].getCenter(new Vector3()).lerp(ends[1].getCenter(new Vector3()), ANCHOR_TO_SEAT);
+
+  /*
+   * 锚点定死之后**不再往车身那边偏**。
+   *
+   * 那一档偏置是为了填掉近景里空着的半边（见 aimAt 的 toward），可它与
+   * 「主体落在舞台中央」是直接冲突的两件事：实测它把后避震、把立、座管
+   * 又拽回中线的另一侧去，一步的主体偏出可用画面半高七成以上。
+   * 主体在中间是硬要求，填空是锦上添花 —— 冲突时前者赢。
+   */
+  const { target, fit } = aimAt(boxes, {
+    az, el, pad, at: anchor, toward: anchor ? null : bike.center, span: bike.radius,
+  });
   return { target, fit };
 }
 
