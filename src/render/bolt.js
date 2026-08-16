@@ -240,7 +240,7 @@ export class Bolts {
   /**
    * id 与紧固件对象都收。
    *
-   * 契约（docs/CONTRACT.md）写的是 `spawn(fastenerId)`，而步骤脚本手头常常已经有
+   * 契约（docs/DEVELOPMENT.md）写的是 `spawn(fastenerId)`，而步骤脚本手头常常已经有
    * 那个对象了 —— 两种都认，调用方不必为此各写一次查表。
    */
   #fastener(x) {

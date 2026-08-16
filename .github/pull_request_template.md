@@ -17,9 +17,8 @@
 
     npm run smoke
 
-改了取景就跑一遍 `node .analysis/probe.mjs .analysis/p-fit.js`，
-把「裁掉 0 步」贴上来。
-改了外观就附一张截图（`node .analysis/shots.mjs <步骤id>` 直接出图）。
+改了取景的，`npm run frames` 前后各跑一遍，把「主体 x,y」那一栏贴上来。
+改了外观的，附一张截图（`npm run build && npm run shots`）。
 -->
 
 ---
