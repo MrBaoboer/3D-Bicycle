@@ -23,6 +23,7 @@ npm run dev
 | `npm run verify` | 清单 × GLB 离线逐条对账，11 项 | 秒 |
 | `npm run build` | Vite 8（rolldown） | 秒 |
 | `npm run check:code` | 以上四条 | 半分钟 |
+| `npm run live` | 线上两处对账：发的是不是同一份产物 | 秒 |
 | `npm run smoke` | Playwright 双画幅真装一遍，102 项 | 三五分钟 |
 | `npm run check` | `check:code` + `smoke` | 几分钟 |
 | `npm run shots` | 从 `dist/` 实拍 README 用的七张截图 | 一两分钟 |
@@ -338,12 +339,20 @@ Y 轴向上（glTF 规范），+Z 是车的左侧，−X 是车头，**1 单位 
 `connect-src` 少放 `blob:` 的话，GLTFLoader 取不到贴图，而页面看上去还是「能开」。
 CSP 只进构建产物，不进 index.html —— 开发期 Vite 靠动态 `<style>` 注样式。
 
-**发版之后一定要核一眼线上首页。** `3d-bicycle.vercel.app` 是手工指定的别名，
-不跟着生产部署自动走：推到 `main` 之后 Vercel 会出一次新的生产部署，
-但那个域名可能还停在上一次（曾经停在一次 `vercel --prod` 的手工部署上，
-差了十二个小时）。项目自带的 `3d-bicycle-tau.vercel.app` 始终指向最新那次，
-拿它对一下就知道有没有掉队；掉了就 `vercel alias set <本次部署地址> 3d-bicycle.vercel.app`。
-GitHub Pages 那一路是全自动的，没有这个问题。
+**线上地址必须用项目自带的那一个，不要用手工别名。**
+
+`3d-bicycle-tau.vercel.app` 是 Vercel 给这个项目分配的生产域名，
+每次生产部署自动指过去 —— 这是唯一可靠的那一档。
+
+曾经把 `3d-bicycle.vercel.app` 当主地址用，代价很大：它属于**另一个项目**
+（`vercel domains add` 报 alias_conflict，`domains inspect` 直接说没有访问权），
+所以永远不会跟着这个项目的发版走。当时靠每次发版后手工 `vercel alias set` 打补丁，
+而这个补丁本身还会与部署赛跑 —— 有一次别名指过去的是上一个提交的部署，
+于是线上主地址落后 GitHub Pages 一整个版本，而两边都返回 200，看不出问题。
+
+**核对办法**：`npm run live`（`tools/live-check.mjs`）。它比对两处首页里那个
+带内容哈希的入口 JS 文件名 —— 一样才是同一份产物，对不上当场退 1。
+只看「打得开 / 返回 200」是不够的：掉队的那一次两边都返回 200、标题也一样。
 
 `vercel.json` 另外发一组安全响应头。缓存分两档：
 `/assets/` 里的产物带内容哈希，给一年 immutable；
