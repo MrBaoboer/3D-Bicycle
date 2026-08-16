@@ -80,7 +80,7 @@
   flex-direction: column;
   align-items: center;
   gap: var(--s3);
-  padding: 0 calc(var(--pad-left) + 60px) 0 calc(var(--pad-right) + 60px);
+  padding: 0 var(--pad-right) 0 var(--pad-left);
   animation: dock-in var(--t-base) var(--ease) both;
 }
 @keyframes dock-in { from { opacity: 0; transform: translateY(10px); } }
@@ -123,39 +123,69 @@
 }
 .kbd .ico { width: 16px; height: 16px; }
 
+/* 手势与界面元件不是按键 —— 画成一枚圆图标，也给得下让线稿读得清的尺寸 */
+.guide-ico {
+  display: inline-grid;
+  place-items: center;
+  width: 34px; height: 34px;
+  border-radius: 50%;
+  background: var(--surface-2);
+  box-shadow: var(--hair);
+  color: var(--text-2);
+}
+.guide-ico .ico { width: 19px; height: 19px; stroke-width: 1.5; }
+
 /* ══════════════ 出门前自检 ══════════════ */
 
 /*
- * 十二行：五个大件 + 七颗紧固件。
+ * 三十四行：二十七个大件 + 七颗紧固件，两列并排。
  * 每一行都是按钮，点回它所属的那一步 —— 一张只会说「还没装」的清单
  * 把人留在原地，能点回去的清单才是「接下来做什么」。
- */
-/*
- * 两列并排：大件一列、紧固件一列。挤成一列十二行时它有 420 px 高，
- * 而取景要按「界面占掉多少」让位 —— 一块占掉半屏的浮层会把整车顶出画面。
+ *
+ * 一屏放不下三十四行，所以这块是滚的。滚就必须让人看出来在滚：
+ * 上下两头用遮罩渐隐（硬切一刀读起来像渲染坏了），表头再钉住不动并报出
+ * 「几件里好了几件」—— 只看得见中间七八行时，那个计数就是全貌。
  */
 .tally {
   display: grid;
   scrollbar-width: thin;
   scrollbar-color: var(--line) transparent;
   grid-template-columns: 1fr 1fr;
-  gap: var(--s5);
-  width: min(100%, 620px);
-  max-height: min(34vh, 300px);
+  gap: 0 var(--s5);
+  width: min(100%, 640px);
+  max-height: min(36vh, 320px);
   overflow-y: auto;
   overscroll-behavior: contain;
-  padding: var(--s3) var(--s4) var(--s4);
+  padding: 0 var(--s4) var(--s3);
   border-radius: var(--r-md);
   background: var(--surface);
   box-shadow: var(--hair), var(--lift-2);
+  /* 只在下缘渐隐。上缘不渐 —— 表头是钉住的，滚上去的行由表头自己的底色盖掉，
+     再叠一层渐隐只会把表头也一起褪成灰的 */
+  -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 16px), transparent 100%);
+  mask-image: linear-gradient(to bottom, #000 calc(100% - 16px), transparent 100%);
 }
 
 .tally-col { min-width: 0; }
 .tally-hd {
-  padding: 0 var(--s2) 4px;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--s2);
+  padding: var(--s3) var(--s2) 5px;
+  background: var(--surface);
   font-size: var(--fs-mark);
   letter-spacing: var(--ls-wide);
   color: var(--text-3);
+}
+.tally-hd b {
+  font-family: var(--mono);
+  font-weight: 400;
+  letter-spacing: var(--ls-tight);
+  color: var(--text-2);
 }
 
 .tally-row {

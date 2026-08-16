@@ -6,28 +6,34 @@
 <title>从零装一台山地车 · 3D 分步说明书</title>
 <meta name="description" content="一台全避震山地车，从一根车架装到能骑走。二十七个大件、七颗上扭矩的螺丝，每一件都亲眼看着装上去。" />
 <meta name="color-scheme" content="light dark" />
+<!-- 地址栏配色。值由界面层按当前主题的 --paper 令牌写入，见 ui/hud.js 的 #paintTheme -->
+<meta name="theme-color" content="#e9ecf1" />
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='26'>🚲</text></svg>" />
 </head>
 <body>
   <canvas id="stage" aria-label="三维装配画面"></canvas>
 
-  <!-- 封面：三维就绪之前挡在前面 -->
+  <!--
+    封面。读模型的那几秒它是一块挡板，车一到就让开半边 ——
+    真正的封面图是那台车本身，不是一段居中的字。
+  -->
   <div id="cover">
     <div class="cover-in">
       <p class="cover-eyebrow">整车从零组装 · 三维分步说明书</p>
       <h1 class="cover-t">从零装一台车</h1>
       <p class="cover-s">
-        一台全避震山地车，从一根车架装到能骑走。<br />
+        一台全避震山地车，从一根车架装到能骑走。
         先拆开看清它由什么构成，再一件件装回去。
       </p>
       <ul class="cover-facts">
-        <li><b>27</b> 个大件</li>
-        <li><b>29</b> 步</li>
-        <li><b>7</b> 颗螺丝要上扭矩</li>
+        <li><b>27</b><span>个大件</span></li>
+        <li><b>29</b><span>步</span></li>
+        <li><b>7</b><span>颗上扭矩的螺丝</span></li>
       </ul>
       <div class="cover-bar"><i id="cover-bar"></i></div>
       <p id="cover-msg" class="cover-msg">正在把车搬进来</p>
       <div id="cover-act" hidden></div>
+      <p class="cover-foot">走一遍十来分钟 · 键盘 ← → 也能翻页</p>
     </div>
   </div>
 

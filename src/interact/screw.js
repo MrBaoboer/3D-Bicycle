@@ -28,7 +28,7 @@ const TAU = Math.PI * 2;
  */
 const LOAD_SPAN = 1.25 * TAU;
 
-/** 扭矩曲线：前段轻快、末段陡升，与 Ease.ignite 同一个路数 */
+/** 扭矩曲线的指数：前段轻快、末段陡升，正是拧到底之后手上那种「越来越沉」 */
 const LOAD_CURVE = 2.6;
 
 /**
@@ -140,27 +140,42 @@ export class Screw {
 
   /**
    * 降级路径：自动拧到扭矩区间中点。跳过的只是手感，该看到、该听到的一样不少。
-   * 不给 id 就把这一组剩下的挨个拧完（按对角顺序 —— 示范不能自己拧错）。
+   *
+   * 不给 id 就把这一组剩下的挨个拧完，且**每拧一颗重问一次该轮到谁**。
+   * 不能一次性排好队：用户可能已经手拧了一颗，此刻该走的是它的对角，
+   * 而不是清单书写顺序里的下一颗 —— 示范不能自己拧错。
    */
   async autoRun(fastenerId) {
     if (!this.session && fastenerId) this._open([fastenerId], {});
     const s = this.session;
     if (!s) return;
-    const ids = fastenerId ? [fastenerId] : this._crossOrder([...s.pending]);
     this.busy = true;
-    for (const id of ids) {
-      if (this.session !== s || !s.pending.has(id)) continue;
-      this._use(id);
-      const b = s.rigs.get(id);
-      const mid = (b.f.torque[0] + b.f.torque[1]) / 2;
-      const top = b.feedAngle + LOAD_SPAN * Math.pow(mid / b.f.strip, 1 / LOAD_CURVE);
-      const from = b.progress;
-      await tween(0.9, (k) => this._turn(from + (b.feedAngle - from) * k), { ease: Ease.inOutQuad });
-      await tween(0.5, (k) => this._turn(b.feedAngle + (top - b.feedAngle) * k), { ease: Ease.outQuad });
-      this._finish(id);
-      await wait(0.25);
+    try {
+      let id = fastenerId ?? this._nextId();
+      while (id && this.session === s && s.pending.has(id)) {
+        await this._runOne(id);
+        if (fastenerId) break;
+        id = this._nextId();
+      }
+    } finally {
+      this.busy = false;
     }
-    this.busy = false;
+  }
+
+  /** 自动拧完一颗：旋到底，再加载到扭矩区间中点 */
+  async _runOne(id) {
+    const s = this.session;
+    this._use(id);
+    const b = s.rigs.get(id);
+    const mid = (b.f.torque[0] + b.f.torque[1]) / 2;
+    const top = b.feedAngle + LOAD_SPAN * Math.pow(mid / b.f.strip, 1 / LOAD_CURVE);
+    const from = b.progress;
+    await tween(0.9, (k) => this._turn(from + (b.feedAngle - from) * k), { ease: Ease.inOutQuad });
+    if (this.session !== s) return;
+    await tween(0.5, (k) => this._turn(b.feedAngle + (top - b.feedAngle) * k), { ease: Ease.outQuad });
+    if (this.session !== s) return;
+    this._finish(id);
+    await wait(0.25);
   }
 
   // ══ 会话 ═══════════════════════════════════════════════════════════
@@ -181,11 +196,13 @@ export class Screw {
     };
     this.session = s;
     for (const id of list) {
-      // 上一轮已经拧好的（往回翻又翻回来）就摆着，不能退回去重拧一遍
+      // 上一轮已经拧好的（往回翻又翻回来）就摆着，不能退回去重拧一遍。
+      // 但它得记进 done：对角顺序是「这一颗必须是上一颗的对角」，
+      // 翻回来重进这一步时把已拧的忘掉，剩下那一颗就永远被当成「新的一对的头一颗」
       if (this.ctx.state.fastened[id] === undefined) this._rig(id);
-      else this.ctx.bolts.spawn(id);
+      else { this.ctx.bolts.spawn(id); s.done.push(id); }
     }
-    s.total = s.pending.size;
+    s.total = list.length;
     // 动手的步骤一开始就把机位钉死，手上对位时画面不会自己漂
     this.ctx.stage.hold(true);
     if (s.pending.size) this._use(list.find((id) => s.pending.has(id)));
@@ -367,7 +384,10 @@ export class Screw {
     if (b.stripped) this.ctx.state.stripped = { ...this.ctx.state.stripped, [id]: true };
     this.ctx.fx?.ring?.(b.obj.position.clone(), b.axis.clone(), { r1: ringR(b.f) });
 
-    s.onEach?.(id, { orderOk, nm: b.nm, stripped: b.stripped, index: s.done.length, total: s.total });
+    s.onEach?.(id, {
+      orderOk, nm: b.nm, stripped: b.stripped,
+      index: s.done.length, total: s.total, remaining: s.pending.size,
+    });
 
     const next = [...s.pending][0];
     if (next) { this._use(next); return; }
@@ -388,12 +408,7 @@ export class Screw {
   }
 
   _mate(id) {
-    for (const pair of this.ctx.bom.crossPairs(this.session.group) || []) {
-      const [a, b] = Array.isArray(pair) ? pair : [pair.a, pair.b];
-      if (a === id) return b;
-      if (b === id) return a;
-    }
-    return null;
+    return this.ctx.bom.crossMate(this.session.group, id);
   }
 
   /**
@@ -407,26 +422,13 @@ export class Screw {
       const m = this._mate(s.done[s.done.length - 1]);
       if (m && s.pending.has(m)) return m;
     }
-    return this._crossOrder([...s.pending])[0] ?? null;
+    return [...s.pending][0] ?? null;
   }
 
   /** 只演一颗。「下一步」按一下走一颗，四颗面盖要按四下 */
   async autoRunNext() {
     const id = this._nextId();
     if (id) await this.autoRun(id);
-  }
-
-  _crossOrder(ids) {
-    if (this.session.order !== 'cross') return ids;
-    const left = new Set(ids);
-    const out = [];
-    for (const id of ids) {
-      if (!left.has(id)) continue;
-      left.delete(id); out.push(id);
-      const m = this._mate(id);
-      if (m && left.has(m)) { left.delete(m); out.push(m); }
-    }
-    return out;
   }
 
   _offerHelp() {

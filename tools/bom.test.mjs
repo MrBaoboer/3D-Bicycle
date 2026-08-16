@@ -139,14 +139,39 @@ const cross = (points) => seed({
 test('crossPairs 把中心对称的两颗配成一对', () => {
   // 一个正方形：上左↔下右、上右↔下左
   const bom = new Bom(cross([[0, 1, 1], [0, -1, -1], [0, 1, -1], [0, -1, 1]]));
-  const pairs = bom.crossPairs('g').map((p) => p.map((f) => f.id).sort().join('+')).sort();
+  const pairs = bom.crossPairs('g').map((p) => [...p].sort().join('+')).sort();
   assert.deepEqual(pairs, ['b0+b1', 'b2+b3']);
+});
+
+/*
+ * 发出去的必须是 id，不是紧固件对象。
+ *
+ * 曾经发的是对象，而唯一的调用方（interact/screw.js 的 _mate）拿它跟一个 id
+ * 字符串比 —— 恒不相等，_mate 永远返回 null。后果不是「少了个优化」：
+ * 「这一颗必须是上一颗的对角」这条判定从此恒假，每一组的第二、第四颗都被
+ * 判成拧错了顺序，结尾自检永远多出一行「面盖有一颗没按对角顺序上」，
+ * 而用户完全按对角拧的。整个项目的三个签名交互之一就这么静默失效。
+ */
+test('crossPairs 发出的是 id，不是紧固件对象', () => {
+  const bom = new Bom(cross([[0, 1, 1], [0, -1, -1], [0, 1, -1], [0, -1, 1]]));
+  for (const pair of bom.crossPairs('g')) {
+    for (const x of pair) assert.equal(typeof x, 'string', `对角配对发出了 ${typeof x}`);
+  }
 });
 
 test('crossPairs 对真实清单给出上左↔下右、上右↔下左', () => {
   const bom = new Bom(real);
-  const pairs = bom.crossPairs('stem-face').map((p) => p.map((f) => f.id).sort().join('+')).sort();
+  const pairs = bom.crossPairs('stem-face').map((p) => [...p].sort().join('+')).sort();
   assert.deepEqual(pairs, ['stem-face-a+stem-face-b', 'stem-face-c+stem-face-d']);
+});
+
+test('crossMate 双向都问得出，问组外的那颗返回 null', () => {
+  const bom = new Bom(real);
+  assert.equal(bom.crossMate('stem-face', 'stem-face-a'), 'stem-face-b');
+  assert.equal(bom.crossMate('stem-face', 'stem-face-b'), 'stem-face-a');
+  assert.equal(bom.crossMate('stem-face', 'stem-face-c'), 'stem-face-d');
+  assert.equal(bom.crossMate('stem-face', 'stem-face-d'), 'stem-face-c');
+  assert.equal(bom.crossMate('stem-face', 'axle-front'), null);
 });
 
 test('不是对角布置时不硬配，抛错说清差了多少', () => {
