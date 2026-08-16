@@ -8,6 +8,12 @@ export const Ease = {
   inOutQuad: (t) => (t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2),
   outCubic: (t) => 1 - Math.pow(1 - t, 3),
   inOutCubic: (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2),
+  /**
+   * 五次平滑（smootherstep）—— 两头速度与**加速度都为零**。
+   * 运镜专用：inOutCubic 的中段速度是平均值的三倍，一段一百度的环绕会在中间
+   * 甩到一百八十度每秒；这一条峰值只有 1.875 倍，起停也不会有那一下顿挫。
+   */
+  smoother: (t) => t * t * t * (t * (t * 6 - 15) + 10),
 };
 
 /**

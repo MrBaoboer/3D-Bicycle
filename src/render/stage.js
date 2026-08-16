@@ -13,6 +13,27 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import { Ease, reducedMotion } from '../util/tween.js';
+
+/** 角度差归一到 ±180 —— 运镜要走最短的那一边，不能绕远路转 300° */
+const wrapDeg = (d) => ((d % 360) + 540) % 360 - 180;
+
+/** 轨道坐标 → 世界坐标 */
+function orbit(target, az, el, dist) {
+  const ar = (az * Math.PI) / 180;
+  const er = (el * Math.PI) / 180;
+  return new THREE.Vector3(
+    target.x + dist * Math.cos(er) * Math.cos(ar),
+    target.y + dist * Math.sin(er),
+    target.z + dist * Math.cos(er) * Math.sin(ar),
+  );
+}
+
+/**
+ * 整车的尺度（米），运镜时长里「目标点挪了多远」按它折算。
+ * 这台车轴距 1.155 m —— 目标点横跨整台车算一趟大的，挪个把厘米不算。
+ */
+const SCENE_SPAN = 1.2;
 
 /**
  * 三档画质预算。
@@ -119,9 +140,18 @@ export class Stage {
     /** 界面遮住的四条边（像素）—— 取景按剩下那块画面算 */
     this.safe = { top: 0, bottom: 0, left: 0, right: 0 };
 
-    this.recommend = { pos: this.camera.position.clone(), target: new THREE.Vector3(), enabled: true };
+    /**
+     * 本步该停在哪儿。**用轨道坐标记**（目标点 + 方位角 + 仰角 + 距离），
+     * `pos` 只是它在世界里的投影，留着给「到位了没有」这类判断用。
+     */
+    this.recommend = {
+      target: new THREE.Vector3(), az: 45, el: 18, dist: 3,
+      pos: this.camera.position.clone(), enabled: true,
+    };
+    /** 正在走的那一次运镜；走完置空 */
+    this.shot = null;
     this.userTook = false;
-    controls.addEventListener('start', () => { this.userTook = true; });
+    controls.addEventListener('start', () => { this.userTook = true; this.shot = null; });
 
     // resize 合并到下一帧：手机上地址栏收起、软键盘进出会连着来十几次
     this._onResize = () => {
@@ -230,7 +260,7 @@ export class Stage {
     const fitD = fit ? this.fitDistance(fit) * 1.06 : undefined;
     const d = fitD !== undefined ? Math.max(dist ?? 0, fitD) : (dist ?? 3);
 
-    const ar = (az * Math.PI) / 180, er = (el * Math.PI) / 180;
+    const ar = (az * Math.PI) / 180;
     const view = this.#viewport();
 
     /*
@@ -244,18 +274,76 @@ export class Stage {
     const right = new THREE.Vector3(Math.sin(ar), 0, -Math.cos(ar));
     t.addScaledVector(right, vSpan * this.camera.aspect * view.shift);
 
-    this.recommend.pos.set(
-      t.x + d * Math.cos(er) * Math.cos(ar),
-      t.y + d * Math.sin(er),
-      t.z + d * Math.cos(er) * Math.sin(ar),
-    );
     this.recommend.target.copy(t);
+    this.recommend.az = az;
+    this.recommend.el = el;
+    this.recommend.dist = d;
+    this.recommend.pos.copy(orbit(t, az, el, d));
     if (!keepUser) this.userTook = false;
     this.cameraEase = ease;
     this.key.target.position.copy(t);
+    this.#beginShot(ease);
+  }
+
+  /** 相机此刻的轨道坐标（相对 controls.target） */
+  #poseNow() {
+    const target = this.controls.target.clone();
+    const v = this.camera.position.clone().sub(target);
+    const dist = Math.max(v.length(), 1e-4);
+    return {
+      target,
+      az: (Math.atan2(v.z, v.x) * 180) / Math.PI,
+      el: (Math.asin(Math.max(-1, Math.min(1, v.y / dist))) * 180) / Math.PI,
+      dist,
+    };
+  }
+
+  /**
+   * 排一次运镜：从此刻的机位走到推荐机位。
+   *
+   * **在轨道坐标里走，不在世界坐标里走。** 世界坐标直线插值的问题不是不平滑，
+   * 而是它走的是弦不是弧：左脚踏与右脚踏这两步隔着 180°，直线插值让相机
+   * 笔直穿过整台车。改成方位角、仰角、距离各自插值，相机就是绕着主体转过去的。
+   *
+   * 三条细节：
+   *  · 方位角走**最短的那一边**（归一到 ±180），否则会绕远路转 300°；
+   *  · 距离按**几何插值**（等比），不是等差 —— 从 5 m 推到 0.3 m 时等差插值
+   *    前半程几乎不动、后半程猛扑；
+   *  · 中段把距离往外鼓一点。转得越多鼓得越高，既避开中途蹭到车身，
+   *    读起来也正是真人换机位的样子：先退开，转过去，再推进。
+   *
+   * 时长按「这一趟有多远」现算：原地微调半秒收，转半圈一秒七。
+   */
+  #beginShot(ease = 1) {
+    const from = this.#poseNow();
+    const to = {
+      target: this.recommend.target.clone(),
+      az: this.recommend.az,
+      el: this.recommend.el,
+      dist: this.recommend.dist,
+    };
+    const dAz = wrapDeg(to.az - from.az);
+    const dEl = to.el - from.el;
+    const zoom = Math.abs(Math.log(Math.max(to.dist, 1e-3) / Math.max(from.dist, 1e-3)));
+    const move = from.target.distanceTo(to.target) / SCENE_SPAN;
+    const effort = Math.abs(dAz) / 180 + Math.abs(dEl) / 60 + zoom / 1.6 + move;
+
+    if (effort < 1e-3) { this.shot = null; return; }
+    // 用户要求减少动效时几乎直接换过去 —— 一秒多的环绕对前庭敏感的人是负担。
+    // 但仍留 0.2 秒：硬切一帧就是这一条要避免的「跳」
+    const slow = reducedMotion();
+    this.shot = {
+      from,
+      to,
+      dAz,
+      t: 0,
+      dur: slow ? 0.2 : Math.max(0.45, Math.min(1.7, (0.45 + 0.8 * effort) / (ease || 1))),
+      bulge: slow ? 0 : Math.min(0.34, 0.3 * effort),
+    };
   }
 
   snapToRecommended() {
+    this.shot = null;
     this.camera.position.copy(this.recommend.pos);
     this.controls.target.copy(this.recommend.target);
     this.controls.update();
@@ -280,14 +368,23 @@ export class Stage {
   }
 
   /**
-   * 相机只在用户没碰过的时候走向推荐机位。
-   * 转到哪儿就停在哪儿 —— 不做「松手几秒自动缓回」，那在动手对位时是灾难。
+   * 走这一趟运镜。用户一碰画面就作废（`shot` 在 controls 的 start 上被置空）——
+   * 转到哪儿就停在哪儿，不做「松手几秒自动缓回」，那在动手对位时是灾难。
    */
   update(dt) {
-    if (this.recommend.enabled && !this.userTook) {
-      const k = 1 - Math.pow(0.001, dt * (this.cameraEase ?? 1));
-      this.camera.position.lerp(this.recommend.pos, k);
-      this.controls.target.lerp(this.recommend.target, k);
+    const s = this.shot;
+    if (s && this.recommend.enabled && !this.userTook) {
+      s.t = Math.min(s.dur, s.t + dt);
+      const k = Ease.smoother(s.t / s.dur);
+      const target = s.from.target.clone().lerp(s.to.target, k);
+      const az = s.from.az + s.dAz * k;
+      const el = s.from.el + (s.to.el - s.from.el) * k;
+      // 等比推拉，再叠一个中段外扩：两头都是 0，落点分毫不差
+      const dist = s.from.dist * Math.pow(s.to.dist / s.from.dist, k)
+        * (1 + s.bulge * Math.sin(Math.PI * k));
+      this.camera.position.copy(orbit(target, az, el, dist));
+      this.controls.target.copy(target);
+      if (s.t >= s.dur) this.shot = null;
     }
     this.controls.update();
   }

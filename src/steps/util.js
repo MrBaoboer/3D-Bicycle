@@ -7,6 +7,9 @@ export const V = (...a) => new Vector3(...(Array.isArray(a[0]) ? a[0] : a));
 
 const DEG = 180 / Math.PI;
 
+/** 角度差归一到 ±180 —— 比「离上一步多远」时不能让 350° 赢过 10° */
+const wrapDeg = (d) => ((d % 360) + 540) % 360 - 180;
+
 /**
  * 近景的最近工作距离，写成「画面上至少要看见这么宽的一块车」（米）。
  *
@@ -259,8 +262,20 @@ export function viewFor(dirArr, { el = 16 } = {}) {
   const from = d.clone().negate();                          // 件是从这一侧来的
   const az = Math.atan2(from.z, from.x) * DEG;
   // 往车头（方位角 180°）偏 50°，取最短的那一边
-  const delta = ((180 - az + 540) % 360) - 180;
-  return { az: Math.round(az + 50 * Math.sign(delta || 1)), el };
+  const delta = wrapDeg(180 - az);
+  const side = Math.sign(delta || 1);
+  /*
+   * 件是**顺着车身长轴**来的（从正前或正后推进去，车把就是这样）时，
+   * 偏左偏右一样成立 —— 那就把两边都报上去，由 shot() 挑离上一步近的那一侧。
+   * 不报的话这五十度往哪边偏就成了 delta 恰好为零时的一个默认符号，
+   * 而它能让镜头凭空甩过整台车八十度。
+   */
+  const free = Math.abs(Math.abs(delta) - 90) > 65;
+  return {
+    az: Math.round(az + 50 * side),
+    el,
+    alt: free ? Math.round(az - 50 * side) : undefined,
+  };
 }
 
 /**
@@ -373,8 +388,24 @@ export function frameWhole(ctx, { burst = false, bare = false, pad, az = 38, el 
  * 半跨度是在相机基底里量的，顺序反了就白量。
  */
 export function shot(ctx, parts, o = {}) {
-  const dir = o.dir ?? ctx.bom.part(parts[0]).install.dir;
-  const view = { ...viewFor(dir, o), ...(o.cam || {}) };
+  /*
+   * 一步装一对镜像件时（两条摇臂、两只把套、两只刹把、两条曲柄），
+   * 从左边看还是从右边看**同样成立** —— 它们是对着装进来的。
+   * 那就挑离上一步近的那一侧站：`near` 是上一步的方位角。
+   *
+   * 不挑的话就成了拿 parts[0] 的方向定生死，而那只是清单里的书写顺序。
+   * 实测传动那一章因此左右横跳三次：牙盘从右看（220°）、曲柄从左看（140°）、
+   * 后拨又回右边（220°）—— 每一步甩过整台车八十度，而传动本来就是一侧的事。
+   */
+  const dirs = o.dir ? [o.dir] : parts.map((id) => ctx.bom.part(id).install.dir);
+  const views = [];
+  for (const d of dirs) {
+    const v = viewFor(d, o);
+    views.push({ az: v.az, el: v.el, ...(o.cam || {}) });
+    if (v.alt !== undefined) views.push({ az: v.alt, el: v.el, ...(o.cam || {}) });
+  }
+  const view = o.near === undefined ? views[0]
+    : views.reduce((a, b) => (Math.abs(wrapDeg(b.az - o.near)) < Math.abs(wrapDeg(a.az - o.near)) ? b : a));
   return { ...view, ...frameOf(ctx, parts, { ...o, az: view.az, el: view.el }) };
 }
 

@@ -187,15 +187,20 @@ export class Engine {
       if (s.task) ctx.hud.setTask(s.task.label, () => s.task.onClick(ctx, this));
       if (s.cue) ctx.hud.setCue(s.cue);
       if (s.cam) {
-        // dist 不给默认值：声明了 fit 的步骤由 fit 定距（见 stage.setRecommended），
-        // 塞一个默认值会把每一处近景都钉在整车距离上
+        /*
+         * dist 不给默认值：声明了 fit 的步骤由 fit 定距（见 stage.setRecommended），
+         * 塞一个默认值会把每一处近景都钉在整车距离上。
+         *
+         * **没有「直接跳过去」这一档。** 步骤之间一律走 stage 排的那一趟运镜 ——
+         * 一步一跳切，看的人得重新找一遍「这是车上的哪儿」，而这份说明书全靠
+         * 「同一台车，镜头挪过去」把二十九步串成一件事。
+         */
         ctx.stage.setRecommended({
           az: s.cam.az ?? 45, el: s.cam.el ?? 16, dist: s.cam.dist,
           target: s.cam.target ? new THREE.Vector3(...s.cam.target) : undefined,
           ease: s.cam.ease ?? 1,
           fit: s.cam.fit,
         });
-        if (s.cam.snap) ctx.stage.snapToRecommended();
       }
       if (s.note) ctx.hud.setNote(s.note);
       if (s.enter) await s.enter(ctx, this);
