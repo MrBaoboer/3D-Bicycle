@@ -36,7 +36,7 @@ const BURST_STAGGER = 0.6;
 const clamp01 = (x) => Math.max(0, Math.min(1, x));
 
 /** 推入一件的标准步骤：取景现算、亮起、拖到位 */
-const push = (ctx, { id, phase, title, cue, parts, hint, note, dir, cam, pad, sound, near }) => ({
+const push = (ctx, { id, phase, title, cue, parts, hint, note, dir, cam, pad, sound, glow, near }) => ({
   id,
   phase,
   title,
@@ -45,7 +45,7 @@ const push = (ctx, { id, phase, title, cue, parts, hint, note, dir, cam, pad, so
   cue,
   note,
   enter(c, engine) {
-    installPart(c, parts, { hint, sound, onDone: () => engine.done() });
+    installPart(c, parts, { hint, sound, glow, onDone: () => engine.done() });
   },
   exit(c) { c.slide.cancel(); for (const p of parts) c.slide.park(p, 1); },
 });
@@ -399,6 +399,13 @@ export function acts(ctx) {
       parts: ['hoses'],
       cue: '两根油管从刹把一路走到卡钳',
       pad: 1.05,
+      /*
+       * 亮度调高到别处的四倍多。这一步的取景是整个前端（油管本来就横跨大半台车），
+       * 而油管是两根细黑管子贴在黑碳纤维车架上 —— 别处那 0.1 的自发光在这个画幅上
+       * 等于没亮，实测动手前后只有千分之一的像素变了，看着就像这一步什么也没发生。
+       * 亮成两条橙线，「从刹把一路走到卡钳」才真的看得见走到哪儿。
+       */
+      glow: 0.45,
     }),
     P({
       id: 'G4',
