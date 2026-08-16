@@ -68,8 +68,7 @@ export class Bike {
       if (o.name && !this.byName.has(o.name)) this.byName.set(o.name, o);
       if (o.isMesh) {
         meshes++;
-        o.castShadow = true;
-        o.receiveShadow = true;
+        // 不设 castShadow / receiveShadow：这一份不投影，理由见 render/stage.js
         // 上游有几处材质双面开着，开着会让辐条与刹车油管出现自阴影噪点
         if (Array.isArray(o.material)) o.material.forEach((m) => { m.side = THREE.FrontSide; });
         else if (o.material) o.material.side = THREE.FrontSide;

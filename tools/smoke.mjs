@@ -312,7 +312,7 @@ async function run(viewport, label, port) {
   // 而所有断言照样通过：摊是摊开了，看还是看不见。
   //
   // 判据取像素：整幅渲染两次（有这一件 / 没这一件），差出来的就是它露在最前面的部分。
-  // 影子要先关掉 —— 换一个投影件会让整张阴影贴图重采样，逐像素差里混进一大片噪点。
+  // （这一份不投影，所以逐像素差里没有阴影贴图重采样的噪点，见 render/stage.js。）
   const seen = await page.evaluate(async () => {
     const c = window.__ctx, e = window.__engine;
     await e.goToStep('A2');
@@ -322,10 +322,6 @@ async function run(viewport, label, port) {
     }
     await new Promise((r) => setTimeout(r, 400));
     const s = c.stage;
-    const shadowWas = s.renderer.shadowMap.enabled;
-    const groundWas = s.ground.visible;
-    s.renderer.shadowMap.enabled = false;
-    s.ground.visible = false;
     const N = 480;
     const h = Math.max(1, Math.round((N * innerHeight) / innerWidth));
     const cv = document.createElement('canvas');
@@ -351,8 +347,6 @@ async function run(viewport, label, port) {
       }
       out.push({ name: p.name, front });
     }
-    s.renderer.shadowMap.enabled = shadowWas;
-    s.ground.visible = groundWas;
     out.sort((a, b) => a.front - b.front);
     return out;
   });
@@ -370,12 +364,8 @@ async function run(viewport, label, port) {
   // 早先它们用一对手写的取景常量，把整车半高报小了一成多 ——
   // 于是打开页面第一眼，后轮下缘就被切掉九十来像素，而全部断言照样通过。
   // 判据取渲染结果：把画布缩样读回来，非背景像素的外接框不许贴到画幅四边。
-  // 量之前先把地面收掉 —— 这一条要判的是「车有没有被切掉」，
-  // 而影子铺得比车宽得多（摊开那一步尤其），把它算进去等于在判影子。
   const whole = await page.evaluate(async () => {
     const c = window.__ctx, e = window.__engine;
-    const groundWas = c.stage.ground.visible;
-    c.stage.ground.visible = false;
     const out = [];
     for (let i = 0; i < e.steps.length; i++) {
       if (!e.steps[i].showAll) continue;
@@ -405,7 +395,6 @@ async function run(viewport, label, port) {
       }
       out.push({ id: e.steps[i].id, x0, y0, x1: N - 1 - x1, y1: h - 1 - y1, N, h });
     }
-    c.stage.ground.visible = groundWas;
     return out;
   });
   // 缩样一格约等于画幅的 1/160，留一格容差
@@ -501,6 +490,7 @@ async function run(viewport, label, port) {
       let dur = 0;
       let stop = false;
       const d0 = s.camera.position.distanceTo(s.controls.target);
+      const from = s.camera.position.clone();
       let minR = d0;
       const tick = () => {
         if (stop) return;
@@ -520,6 +510,7 @@ async function run(viewport, label, port) {
       return {
         id: e.steps[i].id,
         dur,
+        moved: from.distanceTo(s.camera.position),
         // 全程离主体最近时还剩两头那个较近值的几成 —— 绕过去是 1.0 往上，穿过去会掉到零附近
         clear: minR / Math.max(1e-6, Math.min(d0, d1)),
         land: s.camera.position.distanceTo(s.recommend.pos),
@@ -541,18 +532,24 @@ async function run(viewport, label, port) {
     }
     return out;
   });
-  const jumped = flight.filter((f) => f.dur < 0.4);
+  /*
+   * 「跳切」的定义：镜头**明显挪了位置，却没有排运镜**。
+   * 挪得看不出来的那几趟是故意不动画的 —— 为一次不可见的位移跑半秒动画，
+   * 只会让人以为「有什么变了」而重新找一遍画面。见 stage.js 的 TINY。
+   */
+  const jumped = flight.filter((f) => f.dur < 0.3 && f.moved > 0.05);
   const missed = flight.filter((f) => f.land > 0.01);
   const chord = flight.filter((f) => f.turn > 60 && f.clear < 0.9);
   check(`${label}-运镜`, '换步一律走一段运镜，转得多时绕过去，且分毫不差地落在该到的机位上',
     flight.length === (total - 1) * 2 && jumped.length === 0
       && missed.length === 0 && chord.length === 0,
     [
-      jumped.length ? `跳切 ${jumped.map((f) => `${f.id}(${f.dur.toFixed(2)}s)`).join('、')}` : '',
+      jumped.length ? `跳切 ${jumped.map((f) => `${f.id}(挪了${f.moved.toFixed(2)}m 却没排运镜)`).join('、')}` : '',
       missed.length ? `没落到位 ${missed.map((f) => `${f.id}(${f.land.toFixed(3)}m)`).join('、')}` : '',
       chord.length ? `穿过去了 ${chord.map((f) => `${f.id}(离主体剩 ${f.clear.toFixed(2)})`).join('、')}` : '',
     ].filter(Boolean).join(' · ')
-      || `${flight.length} 趟 · 最长 ${Math.max(...flight.map((f) => f.dur)).toFixed(2)}s`
+      || `${flight.length} 趟（其中 ${flight.filter((f) => f.dur === 0).length} 趟原地不动）`
+        + ` · 最长 ${Math.max(...flight.map((f) => f.dur)).toFixed(2)}s`
         + ` · 大转弯离主体最近 ${Math.min(...flight.filter((f) => f.turn > 60).map((f) => f.clear)).toFixed(2)}`);
 
   // ── 主题 ──
