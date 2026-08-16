@@ -344,11 +344,24 @@ CSP 只进构建产物，不进 index.html —— 开发期 Vite 靠动态 `<sty
 `3d-bicycle-tau.vercel.app` 是 Vercel 给这个项目分配的生产域名，
 每次生产部署自动指过去 —— 这是唯一可靠的那一档。
 
-曾经把 `3d-bicycle.vercel.app` 当主地址用，代价很大：它属于**另一个项目**
-（`vercel domains add` 报 alias_conflict，`domains inspect` 直接说没有访问权），
-所以永远不会跟着这个项目的发版走。当时靠每次发版后手工 `vercel alias set` 打补丁，
-而这个补丁本身还会与部署赛跑 —— 有一次别名指过去的是上一个提交的部署，
-于是线上主地址落后 GitHub Pages 一整个版本，而两边都返回 200，看不出问题。
+曾经把 `3d-bicycle.vercel.app` 当主地址用，代价很大。查清楚的状态是这样：
+
+- 那条别名**确实是本账号建的**（alias 记录里 `creator` 是本人，`projectId` 就是本项目），
+  所以 `vercel alias set` 指得动，指过去也真的发本项目的内容；
+- 但它**不在项目的域名表里** —— 项目注册的生产域名只有 `3d-bicycle-tau.vercel.app` 一条。
+  只有域名表里的才会在每次生产部署后自动指过去；
+- 想把它补进域名表补不进去：`POST /v10/projects/{id}/domains` 与
+  `vercel domains add --force` 都报 `owned-on-other-team / alias_conflict`。
+  这是 Vercel 侧的名字占用记录，API 挪不动。
+
+于是只能每次发版后手工 `vercel alias set` 打补丁，而这个补丁自己还会与部署赛跑 ——
+有一次指过去的是**上一个提交**的部署，线上主地址落后 GitHub Pages 一整个版本，
+而两边都返回 200、标题一样，从外面看不出问题。
+
+**顺带排除一个常见猜测**：不是改仓库名导致的。`-tau` 后缀在
+`2026-08-15T17:37:29Z` 建项目那一秒就产生了（Vercel 只在
+`<项目名>.vercel.app` 已被占用时才加随机后缀），而仓库改名发生在约 18 小时之后；
+账号下也只有一个 `3d-bicycle` 项目，改名没有产生重复项目。
 
 **核对办法**：`npm run live`（`tools/live-check.mjs`）。它比对两处首页里那个
 带内容哈希的入口 JS 文件名 —— 一样才是同一份产物，对不上当场退 1。
