@@ -46,8 +46,8 @@ src/
   app/     engine 分步引擎 · build 此刻车上该有哪些件
   steps/   acts 八章二十九步 · util 取景现算与共用工具
   util/    tween 补间
-tools/     门禁与量尺：check-manifest 校验 · *.test 单测 · smoke 冒烟
-           frame-audit 取景量尺 · shots 截图 · serve 静态服务器 · glb-* 模型分析
+tools/     门禁与量尺：check-manifest 校验 · *.test 单测 · smoke 冒烟 · live-check 线上对账
+           frame-audit 取景量尺 · shots 截图 · serve 静态服务器 · glb-* / tex-audit 模型分析
 docs/      DEVELOPMENT.md 本文件 · shots/ README 用的截图
 .analysis/ 开发期探针，不进版本库
 ```
@@ -99,7 +99,7 @@ steps/      步骤内容                        通过 ctx 取用以上全部
 | `pick` | 指到哪件问哪件 | `begin({ids?,fallback?,onHover})` · `cancel()`。只问不改，从不夺走轨道控制。由引擎统一挂，步骤只需在不想要时声明 `noPick: true` |
 | `screw` | 旋入 | `begin({fastenerId,onProgress,onTight,onWrongWay})` · `beginGroup({group,onEach,onAll})` · `cancel()` · `autoRun(id?)` · `autoRunNext()` |
 | `hud` | 界面 | `setCue()` · `setNote()` · `setTask()` · `setAlts()` · `toast()` · `tag()` · `dock()` · `sheet()` · `addSpot()` · `setBoltRow()` · `setChapters()` · `setStep()` · `readyNext()` |
-| `sfx` | 声音 | `play(name,{gain,pitch,delay})` · `setEnabled()`。只有四种：`THREAD_TURN` `TORQUE_CLICK` `SEAT_IN` `WRONG`（`WHEEL_SEAT` `POST_SEAT` 是 `SEAT_IN` 的轻重档别名） |
+| `sfx` | 声音 | `play(name,{gain,pitch,delay})` · `setEnabled()`。只有四种：`THREAD_TURN` `SNUG_CLICK` `SEAT_IN` `WRONG`（`WHEEL_SEAT` `POST_SEAT` 是 `SEAT_IN` 的轻重档别名） |
 | `guides` | 三维方向箭头 | `set([{pos,dir,len}])` · `clear()` |
 | `state` | 状态 | 直接读写；只有偏好落盘 |
 | `engine` | 引擎自身 | `done()` · `go(i)` · `jump(i)` · `goToStep(id)` · `next()` · `back()` · `restart()` · `pending` · `steps` |
@@ -109,8 +109,8 @@ steps/      步骤内容                        通过 ctx 取用以上全部
 
 ### 几处容易写反的签名
 
-- `screw` 的 `onProgress` 收的是**一整个对象** `{id, phase, depth, turns, nm, zone}`，
-  不是一个数。步骤脚本别自己接这个钩子，走 `steps/util.js` 的 `fasten()` / `fastenGroup()`。
+- `screw` 的 `onProgress` 收的是**一整个对象** `{id, depth, turns}`，不是一个数。
+  步骤脚本别自己接这个钩子，走 `steps/util.js` 的 `fasten()` / `fastenGroup()`。
 - **`bom.crossPairs(group)` 发的是 id 对，不是紧固件对象。** 要问「谁是谁的对角」
   走 `crossMate(group, id)`。发成对象而调用方拿它跟 id 字符串比，恒不相等 ——
   对角配对在运行时静默失效，每组的第二、第四颗都被判成拧错。
@@ -128,7 +128,7 @@ steps/      步骤内容                        通过 ctx 取用以上全部
   id: 'D2', phase: 3,                       // phase 是章节名数组的下标
   installs: ['handlebar'],                  // 这一步装上哪些件
   fastens: ['stem-face-a', 'stem-face-b'],  // 这一步拧哪些紧固件
-  showAll: false,                           // true = 不管装配计划，整车全present
+  showAll: false,                           // true = 不管装配计划，整车全在场
   title: '四颗面盖螺丝',
   cam: shot(ctx, ['handlebar'], { cam: { az: 170, el: 26 } }),
   cue: '按对角顺序拧，四颗分两轮',            // 一行纯文字，没有图标也没有 HTML
@@ -237,7 +237,7 @@ steps/      步骤内容                        通过 ctx 取用以上全部
 **它不能用来反推装配方向**：扣掉车架漂移、在车架局部系逐件量过之后，座管的脱离方向是
 [0.210, 0, −0.978]（几乎纯横向），而立管轴是 [0.514, 0.858, 0]；左右脚踏也朝同一侧飞出，
 而真实脚踏沿曲柄轴反向旋入。装配方向一律取自**几何轴**（立管轴、转向轴、前轴、曲柄轴）。
-这条动画目前只挂上不播。
+这条动画一帧也不播。
 
 ### 坐标与单位
 
@@ -299,7 +299,7 @@ steps/      步骤内容                        通过 ctx 取用以上全部
    推出去 0.16 个半跨度。
 
 `npm run frames` 的「主体 x,y」那一栏盯着第 7 条，偏心超过 0.30 当场退 1。
-目前二十六步全部落在 0.18 以内，只有车把那一步是明写的例外。
+目前每一步都落在 0.18 以内，唯一的明写偏移是车把那一步。
 
 **拧螺丝的步骤，机位必须正对螺栓轴、从螺栓头那一侧看。** 两条都是硬要求：
 看不到螺栓头就无从下手；而旋入靠指针绕轴画圈读角度，轴一旦躺进屏幕平面
@@ -472,8 +472,6 @@ steps/      步骤内容                        通过 ctx 取用以上全部
 |---|---|---|
 | 主 | <https://build-bike.vercel.app> | 推到 `main` → Vercel 出一次生产部署 |
 | 备 | <https://mrbaoboer.github.io/3D-Bike-Builder/> | `.github/workflows/deploy.yml` → GitHub Pages |
-
-两处都是全自动的，发版之后不需要任何手工步骤。
 
 **线上主地址必须是项目域名表里的那一条，不要用部署别名。** 别名指的是某一个具体部署，
 不跟着生产走，每发一版就掉队一次，而且照样返回 200、标题一样，从外面看不出来。

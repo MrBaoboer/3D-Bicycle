@@ -33,7 +33,7 @@
 | **不想动手** | 连着失败三次，会自己摆出「帮我装上」，点一下替你演完 |
 | **退出去** | <kbd>Esc</kbd> 逐层关掉说明卡与菜单 |
 
-这一步还有活没干完时按「下一步」，它先替你演一件 —— 四颗面盖螺丝要按四下，第五下才翻页。
+活还没干完就按「下一步」，它不翻页，先替你演一件 —— 四颗面盖螺丝要按四下，第五下才翻页。
 
 <br>
 
@@ -93,10 +93,8 @@ npm install && npm run dev
 
 ## 参与
 
-哪一步走不下去、哪个数不对，[开个 Issue](https://github.com/MrBaoboer/3D-Bike-Builder/issues) 就行。
-订正工程数据（规格、螺距、装配顺序）尤其欢迎：这份清单里每一个数都可能错，
-而错了的后果是有人照着它把车装坏。
-
+哪一步走不下去、哪个数不对，[开个 Issue](https://github.com/MrBaoboer/3D-Bike-Builder/issues) 就行，
+订正工程数据（规格、螺距、装配顺序）尤其欢迎。
 怎么改见 [CONTRIBUTING.md](CONTRIBUTING.md)，另有
 [行为准则](CODE_OF_CONDUCT.md) &nbsp;·&nbsp;
 [安全上报](SECURITY.md) &nbsp;·&nbsp;
@@ -104,15 +102,11 @@ npm install && npm run dev
 
 ## 许可
 
-| | 是什么 | 许可 |
+| | 范围 | 许可 |
 |---|---|---|
 | 代码 | `src/` `tools/` `index.html` 构建配置 | **AGPL-3.0** |
-| 我做的内容 | 课程编排、文案、装配清单、程序化螺栓与工具几何、音效配方、设计令牌 | **CC BY-NC-SA 4.0** |
+| 内容 | 课程编排、文案、装配清单、程序化螺栓与工具几何、音效配方、设计令牌 | **CC BY-NC-SA 4.0** |
 | 整车模型 | `public/models/CarbonFrameBike.glb` 与含它画面的截图 | **CC BY-SA 4.0**，第三方 |
 
-代码是纯前端应用，AGPL 下**部署出去访问者就是接收者** —— 挂到网上供人访问，
-就得把改动后的完整源码一并提供。内容层的 NC 是禁止商业使用。
-
-**整车模型那一层不归我管**：它是第三方素材（署名见 [assets/CREDITS.md](assets/CREDITS.md)），
-我不是版权人、无权转授。要商用最干净的做法是换掉模型。
-细节与单独授权见 [COMMERCIAL.md](COMMERCIAL.md)。
+整车模型是第三方素材（署名见 [assets/CREDITS.md](assets/CREDITS.md)），维护者无权转授。
+要自己部署或商用，先看 [COMMERCIAL.md](COMMERCIAL.md)。
