@@ -1,6 +1,6 @@
 # 参与进来
 
-欢迎的：修 bug、改错别字、补浏览器兼容、补无障碍、订正工程数据（扭矩、规格、装配顺序）。
+欢迎的：修 bug、改错别字、补浏览器兼容、补无障碍、订正工程数据（规格、螺距、装配顺序）。
 
 **订正工程数据尤其欢迎。** 这份清单里的每一个数都可能错，
 而错了的后果是有人照着它把车装坏。发现哪一条不对，开个 Issue 说清出处就行。
@@ -14,8 +14,17 @@
 npm install && npm run dev
 ```
 
-动手之前看一遍 [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)：上半部分是各层之间的契约，
-**改接口先改它**；下半部分是维护时绕不开的几处约束，基本都是踩出来的。
+动手之前看一遍 [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)。它就是这个项目的约定，
+PR 里最常撞上的是这四条：
+
+- **清单是唯一事实来源** —— 装配方向、行程、螺距、依赖顺序都在
+  `assets/bike.manifest.json`，代码里不许再写第二份（[清单](docs/DEVELOPMENT.md#清单)）
+- **取景不写常量** —— 每一步的机位由 `steps/util.js` 从几何现算
+- **世界方向不能直接加到 position 上** —— 一律走 `ctx.slide.park()`
+- **颜色只在 `src/ui/styles/tokens.css` 里定义**，组件只引用语义名
+
+文案上只有一条：**能少则少。** 常驻文字只有步名与一行旁白，
+说明卡只写「物理原因看不见」的那几处。
 
 ## 提交之前
 
@@ -33,22 +42,7 @@ npm run smoke
 ```
 
 改了取景的，`npm run frames` 前后各跑一遍对着看。改了外观的，附一张截图
-（`npm run build && npm run shots` 从产物里实拍七张）。
-
-## 几条约定
-
-细节都在 [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)，这里只列 PR 里最常撞上的几条：
-
-- **清单是唯一事实来源。** 装配方向、行程、扭矩、依赖顺序都写在
-  `assets/bike.manifest.json`，代码里不许再写第二份。改了跑 `npm run verify`。
-- **取景不写常量。** 每一步的机位与取景由 `steps/util.js` 从几何现算。
-- **世界方向不能直接加到 position 上。** 模型里每个件的父级基底都不是单位阵，
-  一律走 `ctx.slide.park()`。
-- **颜色只在 `src/ui/styles/tokens.css` 里定义**，组件只引用语义名。
-- **有对错之分的交互，正例反例都要断言。**
-- **文案能少则少。** 这一份要让人看懂，不是让人读懂。
-  常驻文字只有步名与一行旁白；说明卡只写「物理原因看不见」的那几处。
-- **不手改 `dist/`。**
+（`npm run build && npm run shots` 从产物里实拍六张）。不手改 `dist/`。
 
 ## 提交与 PR
 
