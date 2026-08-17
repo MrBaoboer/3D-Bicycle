@@ -2,8 +2,6 @@
 
 ## 攻击面
 
-把边界说清楚，才好判断什么算漏洞。
-
 **纯静态站点。** 没有后端、没有账号、没有数据库、没有服务端渲染。
 产物就是一份 HTML、两个 JS chunk、一份 CSS，加一个 12 MB 的模型文件。
 
@@ -17,9 +15,8 @@ object-src 'none'; base-uri 'self'; form-action 'none'
 
 `blob:` 是给 GLTFLoader 的 —— 它把 GLB 里的贴图切成 blob 再取回来。
 
-**没有 cookie，不做追踪。** localStorage 里只有四个偏好：
-深浅主题、声音开关、是否看过操作说明、扭矩单位用 N·m 还是 lb·ft。
-装到哪一步一概不存 —— 刷新即从头开始。
+**没有 cookie，不做追踪。** localStorage 里只有三个偏好：深浅主题、声音开关、
+是否看过操作说明。装到哪一步一概不存 —— 刷新即从头开始。
 
 **音效是实时合成的**，不加载任何音频文件。
 
@@ -41,7 +38,6 @@ object-src 'none'; base-uri 'self'; form-action 'none'
 ## 怎么报
 
 走 GitHub 的私密披露：仓库 **Security** 标签页 → **Report a vulnerability**。
-
 **不要开公开 Issue。**
 
 ## 响应
@@ -49,6 +45,4 @@ object-src 'none'; base-uri 'self'; form-action 'none'
 一个人维护的项目，没有 SLA。收到后尽快确认，判定成立就修，修完在 Release Notes 里
 说明影响范围。愿意的话会在致谢里写上你的名字。
 
-## 支持范围
-
-只支持 `main` 分支与线上部署的那一版。历史提交与各种 fork 不在范围内。
+只支持 `main` 分支与线上部署的那一版，历史提交与各种 fork 不在范围内。

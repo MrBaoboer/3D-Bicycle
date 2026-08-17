@@ -1,5 +1,5 @@
 name: 工程数据不对
-description: 扭矩、规格、牙向、装配顺序、术语 —— 哪一条错了
+description: 规格、牙向、装配顺序、术语 —— 哪一条错了
 labels: [数据订正]
 body:
   - type: markdown
@@ -16,9 +16,9 @@ body:
     attributes:
       label: 哪一类
       options:
-        - 扭矩区间或滑丝阈值
-        - 规格（螺距、公称直径、尺寸）
+        - 规格（公称直径、螺距、拧到底的圈数）
         - 牙向（正牙 / 反牙）
+        - 工具（几号内六角、多大的扳手）
         - 装配顺序或前置依赖
         - 术语、名称、说明卡里的解释
         - 其他
@@ -38,7 +38,7 @@ body:
     id: now
     attributes:
       label: 现在写的是
-      placeholder: 扭矩 35–40 N·m
+      placeholder: 螺距 1.5 mm
     validations:
       required: true
 
@@ -46,7 +46,7 @@ body:
     id: should
     attributes:
       label: 应该是
-      placeholder: 扭矩 40–45 N·m
+      placeholder: 螺距 1.0 mm
     validations:
       required: true
 

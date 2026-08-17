@@ -1,11 +1,11 @@
 # 开发与维护
 
 面向要改这个项目的人。上半部分是各层之间的契约（**改接口先改这里**），
-下半部分是维护时绕不开的几处约束。
+下半部分是维护时绕不开的几处约束，都是踩出来的。
 
 ## 环境与命令
 
-Node `^22.13.0 || >=24.0.0`。浏览器要 WebGL 2：Chrome / Edge 111+、Safari 16.4+、Firefox 113+。
+Node `^22.13.0 || >=24.0.0`。
 
 ```bash
 npm install && npm run dev
@@ -23,7 +23,7 @@ npm install && npm run dev
 | `npm run smoke` | Playwright 双画幅真装一遍，108 项 | 三五分钟 |
 | `npm run check` | `check:code` + `smoke` | 几分钟 |
 | `npm run frames` | 逐步量取景：主体在不在舞台中央、占多少、整车照贴没贴边 | 一两分钟 |
-| `npm run shots` | 从 `dist/` 实拍 README 用的七张截图 | 一两分钟 |
+| `npm run shots` | 从 `dist/` 实拍 README 用的六张截图 | 一两分钟 |
 | `npm run live` | 线上两处对账：发的是不是同一份产物 | 秒 |
 | `npm run model` | 打印整车装配树 | 秒 |
 
@@ -46,17 +46,15 @@ src/
   app/     engine 分步引擎 · build 此刻车上该有哪些件
   steps/   acts 八章二十九步 · util 取景现算与共用工具
   util/    tween 补间
-tools/     门禁与量尺：check-manifest 校验 · *.test 单测 · smoke 冒烟
-           frame-audit 取景量尺 · shots 截图 · serve 静态服务器 · glb-* 模型分析
+tools/     门禁与量尺：check-manifest 校验 · *.test 单测 · smoke 冒烟 · live-check 线上对账
+           frame-audit 取景量尺 · shots 截图 · serve 静态服务器 · glb-* / tex-audit 模型分析
 docs/      DEVELOPMENT.md 本文件 · shots/ README 用的截图
 .analysis/ 开发期探针，不进版本库
 ```
 
 **门禁进版本库，量尺不进。** `tools/` 回答「有没有坏」，CI 与提交前跑，坏了就红；
-`.analysis/` 回答「现在到底是多少」，随查随写、查完就扔。
-写新探针照着 `tools/frame-audit.mjs` 抄：起 `dist/`、打开页面、在页内 `evaluate` 里量、
-把数打出来。别把探针塞进 `tools/` —— 那里每多一个文件，
-后来的人就多一次「这个还要不要维护」的判断。
+`.analysis/` 回答「现在到底是多少」，随查随写、查完就扔。写新探针照着
+`tools/frame-audit.mjs` 抄：起 `dist/`、打开页面、在页内 `evaluate` 里量、把数打出来。
 
 ## 分层
 
@@ -77,8 +75,8 @@ steps/      步骤内容                        通过 ctx 取用以上全部
 ```
 
 **界面层不许自带内容。** 章节名由 `steps/` 提供，`hud.setChapters(steps, phases)`
-的第二个参数是必传的 —— 界面自己存一份的话，两边会各存一套，
-多出来的那一章会被静默并进上一章，而顶部那条进度轨看不出这件事。
+的第二个参数是必传的 —— 界面自己再存一份的话，两边会各存一套，
+多出来的那一章被静默并进上一章，而顶部那条进度轨看不出这件事。
 
 ### 样式的层叠顺序
 
@@ -95,13 +93,13 @@ steps/      步骤内容                        通过 ctx 取用以上全部
 |---|---|---|
 | `stage` | 舞台 | `setRecommended({az,el,dist,target,fit})` · `snapToRecommended()` · `setSafeArea({top,bottom,left,right})` · `hold(bool)` · `setTheme()` · `updaters` |
 | `bike` | 整车 | `get(name)` · `has(name)` · `boundsOf(name)` · `highlight(name,color,strength)` · `clearHighlights()` |
-| `bom` | 清单 | `part(id)` · `fastener(id)` · `groupOf(idOrGroup)` · `crossPairs(group)` · `crossMate(group,id)` · `order()` · `parts` · `fasteners` · `counts` |
+| `bom` | 清单 | `part(id)` · `fastener(id)` · `nodesOf(partId)` · `groupOf(idOrGroup)` · `crossPairs(group)` · `crossMate(group,id)` · `order()` · `parts` · `fasteners` · `counts` |
 | `bolts` | 程序化螺丝与工具 | `spawn(idOrFastener)` · `useTool(kind)` · `hideTools()` · `remove(id)` · `clear()` |
 | `slide` | 一自由度推入 | `begin({partId,onSeat,onAll,wrongHint,sound})` · `park(partId,u)` · `burst(partId,世界位移)` · `cancel()` · `autoSeat(partId?)` |
 | `pick` | 指到哪件问哪件 | `begin({ids?,fallback?,onHover})` · `cancel()`。只问不改，从不夺走轨道控制。由引擎统一挂，步骤只需在不想要时声明 `noPick: true` |
 | `screw` | 旋入 | `begin({fastenerId,onProgress,onTight,onWrongWay})` · `beginGroup({group,onEach,onAll})` · `cancel()` · `autoRun(id?)` · `autoRunNext()` |
-| `hud` | 界面 | `setCue()` · `setNote()` · `setTask()` · `setAlts()` · `toast()` · `tag()` · `dock()` · `sheet()` · `addSpot()` · `setTorqueGauge()` · `setBoltRow()` · `setChapters()` · `setStep()` · `readyNext()` |
-| `sfx` | 声音 | `play(name,{gain,pitch,delay})` · `setEnabled()`。只有四种：`THREAD_TURN` `TORQUE_CLICK` `SEAT_IN` `WRONG`（`WHEEL_SEAT` `POST_SEAT` 是 `SEAT_IN` 的轻重档别名） |
+| `hud` | 界面 | `setCue()` · `setNote()` · `setTask()` · `setAlts()` · `toast()` · `tag()` · `dock()` · `sheet()` · `addSpot()` · `setBoltRow()` · `setChapters()` · `setStep()` · `readyNext()` |
+| `sfx` | 声音 | `play(name,{gain,pitch,delay})` · `setEnabled()`。只有四种：`THREAD_TURN` `SNUG_CLICK` `SEAT_IN` `WRONG`（`WHEEL_SEAT` `POST_SEAT` 是 `SEAT_IN` 的轻重档别名） |
 | `guides` | 三维方向箭头 | `set([{pos,dir,len}])` · `clear()` |
 | `state` | 状态 | 直接读写；只有偏好落盘 |
 | `engine` | 引擎自身 | `done()` · `go(i)` · `jump(i)` · `goToStep(id)` · `next()` · `back()` · `restart()` · `pending` · `steps` |
@@ -111,12 +109,11 @@ steps/      步骤内容                        通过 ctx 取用以上全部
 
 ### 几处容易写反的签名
 
-- `screw` 的 `onProgress` 收的是**一整个对象** `{id, phase, depth, turns, nm, zone}`，
-  不是一个数。步骤脚本别自己接这个钩子，走 `steps/util.js` 的 `fasten()` / `fastenGroup()`。
+- `screw` 的 `onProgress` 收的是**一整个对象** `{id, depth, turns}`，不是一个数。
+  步骤脚本别自己接这个钩子，走 `steps/util.js` 的 `fasten()` / `fastenGroup()`。
 - **`bom.crossPairs(group)` 发的是 id 对，不是紧固件对象。** 要问「谁是谁的对角」
-  走 `crossMate(group, id)`。这里发过对象而调用方拿它跟 id 字符串比 —— 恒不相等，
-  「对角配对」在运行时等于不存在，每一组的第二、第四颗都被判成拧错，而当时的冒烟
-  只断言「四颗都记上了账」，整整一版没人发现签名交互已经不工作了。
+  走 `crossMate(group, id)`。发成对象而调用方拿它跟 id 字符串比，恒不相等 ——
+  对角配对在运行时静默失效，每组的第二、第四颗都被判成拧错。
 - `bolts.spawn()` 收 id 或紧固件对象都行；`slide.park(partId, u)` 的 `u`
   **0 是预备位、1 是装配位**。
 - `fx.ring()` 的半径要按被标记那件东西的尺度给。默认值是给 M5 螺栓头的，
@@ -131,7 +128,7 @@ steps/      步骤内容                        通过 ctx 取用以上全部
   id: 'D2', phase: 3,                       // phase 是章节名数组的下标
   installs: ['handlebar'],                  // 这一步装上哪些件
   fastens: ['stem-face-a', 'stem-face-b'],  // 这一步拧哪些紧固件
-  showAll: false,                           // true = 不管装配计划，整车全present
+  showAll: false,                           // true = 不管装配计划，整车全在场
   title: '四颗面盖螺丝',
   cam: shot(ctx, ['handlebar'], { cam: { az: 170, el: 26 } }),
   cue: '按对角顺序拧，四颗分两轮',            // 一行纯文字，没有图标也没有 HTML
@@ -189,7 +186,7 @@ steps/      步骤内容                        通过 ctx 取用以上全部
 与 `engine.finishPending()`，两者都只认 ctx 里各原语的 `session.pending`。
 
 **上一下还没走完时按的那一下要攒着**（最多四下），忙完一下一下补上。
-「拆开看看」那一步进场要演一秒多，而连按两下方向键是最自然不过的事 ——
+「拆开看看」那一步进场要演一秒多，而连按两下方向键是最自然不过的事，
 丢掉的那一下读起来就是键盘失灵。直接跳步（`engine.jump()`）会把攒下的清空。
 
 键盘上空格与方向键的让位规矩不一样：
@@ -202,7 +199,7 @@ steps/      步骤内容                        通过 ctx 取用以上全部
 
 ## 清单
 
-`assets/bike.manifest.json` 是唯一事实来源。装配方向、行程、扭矩、依赖顺序都写在这里，
+`assets/bike.manifest.json` 是唯一事实来源。装配方向、行程、螺距、依赖顺序都写在这里，
 代码里不许再写第二份。改了跑 `npm run verify`。
 
 - **`install.kind`** 分 `slide`（推入）与 `thread`（旋入）。`thread` 的件意味着
@@ -240,7 +237,7 @@ steps/      步骤内容                        通过 ctx 取用以上全部
 **它不能用来反推装配方向**：扣掉车架漂移、在车架局部系逐件量过之后，座管的脱离方向是
 [0.210, 0, −0.978]（几乎纯横向），而立管轴是 [0.514, 0.858, 0]；左右脚踏也朝同一侧飞出，
 而真实脚踏沿曲柄轴反向旋入。装配方向一律取自**几何轴**（立管轴、转向轴、前轴、曲柄轴）。
-这条动画目前只挂上不播。
+这条动画一帧也不播。
 
 ### 坐标与单位
 
@@ -268,8 +265,8 @@ steps/      步骤内容                        通过 ctx 取用以上全部
 
 ## 取景：现算，不写常量
 
-每一步的机位与取景都由 `steps/util.js` 从几何现推，入口见[上文](#一步长什么样)。
-手写过一版常量，二十来个数里实测有六个是错的，而且每加一步就要再手量一次。
+四个入口见[上文](#一步长什么样)。手写过一版常量，二十来个数里实测有六个是错的，
+而且每加一步就要再手量一次。
 
 七条判据，少一条就有步骤看不清：
 
@@ -280,32 +277,29 @@ steps/      步骤内容                        通过 ctx 取用以上全部
 2. **在相机基底里量**。`fit` 的 `{r,h}` 被当成水平半径与垂直半高独立处理，
    而相机是斜着看的，包围盒的对角线比任何一条边都长。拿世界 XYZ 凑的结果：
    二十八步里十三步被裁，最多一步下缘超出 417 像素。
-3. **补上主体的半深** `fit.d`。近景里主体深度与机位距离同量级 ——
-   主转点轴那一步主体长 211 mm 而机位只有 190 mm 远，最靠近相机的那个角
-   实际只有九十来毫米远，投影出来比按中心算的宽四成，右边整整裁掉 100 像素。
-   判据要落在离相机最近的那一层上。
+3. **补上主体的半深** `fit.d`。近景里主体深度与机位距离同量级 —— 主转点轴那一步主体长
+   211 mm 而机位只有 190 mm 远，最靠近相机的那个角实际只有九十来毫米远，
+   投影出来比按中心算的宽四成。判据要落在离相机最近的那一层上。
 4. **逐网格量，不要先并成一个包围盒。** 一台自行车又扁又空，整车并集的角落里
-   大半是空气，而撑开画幅的正是这些空角 —— 实测整车照按并集算出来的竖向半跨度
-   比车真正的半高大 25%，首屏那台车只占了画幅高度的一半，四周全是灰。
+   大半是空气，而撑开画幅的正是这些空角 —— 实测按并集算出来的竖向半跨度
+   比车真正的半高大 25%，首屏那台车只占了画幅高度的一半。
 5. **近景有最近工作距离**（`MIN_SPAN`，260 mm）。只按主体包络定距的话，
-   小件会把镜头拽到贴脸的位置：主转点轴那一步实测机位只有 260 mm 远，
-   屏幕上是一整片碳纤维编织纹，中间一颗小小的银色螺栓 —— 分辨率很高，
-   可是没人看得出这是车上的哪儿。
+   小件会把镜头拽到贴脸的位置 —— 满屏碳纤维编织纹里一颗小螺栓，
+   看不出这是车上的哪儿。
 6. **锚点落在预备位**（`ANCHOR_TO_SEAT` = 0.10），不是整段行程的中点。
    件常常比行程还小，对准中点的话它停在行程哪一头都贴着画幅边；
    而进场那一刻件停在预备位，那才是「初始视角」说的那一眼。
    代价是画幅要大一点（半跨度由 `(行程+件长)/2` 变成 `行程+件长/2`），
-   多出来的那一条空带落在件飞来的那一侧 —— 认了：
-   「第一眼看见它在中间」比「画幅再紧一成」值钱。
+   多出来的那一条空带落在件飞来的那一侧。
 7. **默认正中，要偏就明写。** 主体锚点取进场那一刻的预备位，落在舞台正中；
    构图上确实要偏的，由步骤自己写 `off: [右为正, 上为正]`（以取景半跨度计，
    车把那一步是 `[-0.13, 0.14]`）。明写的偏移看得见、改得动、也能被 `npm run frames` 盯住。
-   不要改回「一律往整车形心偏一档」那种自动补偿：它与「这一步要看的那件东西落在舞台
-   中央」直接冲突，冲突时后者赢；拧螺丝那两步曾因此把只占画面 6% 宽的四颗面盖螺丝
-   推出去 0.16 个半跨度，一眼就看得出没在中间。
+   **不要改回「一律往整车形心偏一档」那种自动补偿**：它与「这一步要看的那件东西落在
+   舞台中央」直接冲突，冲突时后者赢 —— 拧螺丝那两步曾因此把只占画面 6% 宽的四颗面盖螺丝
+   推出去 0.16 个半跨度。
 
 `npm run frames` 的「主体 x,y」那一栏盯着第 7 条，偏心超过 0.30 当场退 1。
-目前二十六步全部落在 0.18 以内，只有车把那一步是明写的例外。
+目前每一步都落在 0.18 以内，唯一的明写偏移是车把那一步。
 
 **拧螺丝的步骤，机位必须正对螺栓轴、从螺栓头那一侧看。** 两条都是硬要求：
 看不到螺栓头就无从下手；而旋入靠指针绕轴画圈读角度，轴一旦躺进屏幕平面
@@ -318,7 +312,7 @@ steps/      步骤内容                        通过 ctx 取用以上全部
 只把**自己那一格**重算一遍，既不回头刷祖先，也不往下刷子树。
 而取景代码跑在**首帧渲染之前**，那时全场没有任何人刷过矩阵。
 
-坑过两次，都不报错，只让画面「有点怪」：
+两种走法：
 
 - **祖先旧。** 前面的步骤刚把摇臂、曲柄、轮组挪过位，挂在它们底下的件拿到的祖先矩阵
   是旧的。这份模型里节点原点离它自己的几何常常很远（油管那四段差了一米），矩阵一旧，
@@ -328,14 +322,11 @@ steps/      步骤内容                        通过 ctx 取用以上全部
   `slide.park(id, u)` 改的是组节点的 `position`，而盒是逐**子网格**量的，
   子网格拿到的还是组节点的旧 `matrixWorld` —— park 出来的位移一点也没量到，
   「量整段行程」整个失效，镜头对准的是件**装完之后**在哪儿。
-  实测二十六步里八步的主体在进场那一刻整整偏出一个 gap（后避震偏出可用画面半高 0.55），
-  上下头碗的行程比画幅还高 19%。
 
 所以 `steps/util.js` 的 `nodeBoxes()` 与 `render/bike.js` 的 `boundsOf()`
 都在量之前先 `updateWorldMatrix(true, true)`（祖先 + 整棵子树）。新写量几何的地方照做。
-
-两次都是 `npm run frames` 的「主体 x,y」那一栏抓出来的 ——
-只量整幅画面的非背景外接框是看不见它们的。
+两种都不报错，也都只有 `npm run frames` 的「主体 x,y」那一栏抓得出来 ——
+只量整幅画面的非背景外接框是看不见的。
 
 ## 换步的运镜
 
@@ -440,18 +431,15 @@ steps/      步骤内容                        通过 ctx 取用以上全部
 ## 不投影
 
 场景里没有影子，也没有接影的地面（`render/stage.js` 不开 `shadowMap`，
-`render/bike.js` 不设 `castShadow` / `receiveShadow`）。
+`render/bike.js` 不设 `castShadow` / `receiveShadow`）。一台自行车投在地上的影子是一大片
+辐条、链条、叉腿交织的噪点，面积常常比主体本身还大，近景里就摊在主体旁边抢视线。
 
-一台自行车投在地上的影子是一大片辐条、链条、叉腿交织的噪点，面积常常比主体本身还大；
-近景步骤里它就摊在主体旁边，眼睛先被它勾过去。去掉之后主体浮在一块干净的台面上，
-边缘一清二楚，顺带省掉每帧一张 2048² 的阴影贴图与一整趟投影渲染。
+两处连带的量纲要跟着改：
 
-代价是向下那一面失去了唯一的形体线索，所以半球光的下半色抬亮转冷
-（`0x3a3630` → `0x8a8f96`，强度 0.45 → 0.6），深色主题下另收一档。
-
-连带的量纲变化：**取景的余量要比有影子时收紧**。影子原本占着车底下那一块，
-同样的 `pad` 在没有影子时读起来就是「车缩在中间一小团」——
-整车那几张实测竖向由 0.71 收到 0.78–0.87。
+- 向下那一面失去了唯一的形体线索，所以半球光的下半色抬亮转冷
+  （`0x3a3630` → `0x8a8f96`，强度 0.45 → 0.6），深色主题下另收一档。
+- **取景的余量要比有影子时收紧。** 影子原本占着车底下那一块，同样的 `pad`
+  在没有影子时读起来就是「车缩在中间一小团」—— 整车那几张实测竖向由 0.71 收到 0.78–0.87。
 
 ## 冒烟走查
 
@@ -461,13 +449,14 @@ steps/      步骤内容                        通过 ctx 取用以上全部
 「一下一件」演完），再对账：每一件精确落回装配位（偏差 < 0.01 mm）、二十七件七颗都记上账、
 自检三十四行报「全部到位」、在场件数一路只增不减、四颗面盖要按四下第五下才翻页、
 **按对角拧算通过而拧相邻的当场记下不合格**、整车那四张成品照完整落在画幅内、
-摊开那一步二十七件每一件都露得出来、换步一律走一段运镜。
+摊开那一步二十七件每一件都露得出来且指到哪件报哪件的名字、换步一律走一段运镜、
+深浅两套主题都换得动、方向键能前进后退、全程控制台没有报错与 4xx/5xx。
 
-改 `tools/smoke.mjs` 之前先读这两条，都是踩出来的：
+改 `tools/smoke.mjs` 之前先读这两条：
 
 - 判「画面不是纯色」不能直接 `drawImage` WebGL 画布。没开 `preserveDrawingBuffer`
-  时那块缓冲在合成后就清了，读回来永远全黑 —— 十一步全部假失败，
-  而真正的报错混在里面没人看得见。要在同一个任务里先 `render()` 再取样。
+  时那块缓冲在合成后就清了，读回来永远全黑 —— 会变成十一步一起假失败，
+  真正的报错混在里面看不见。要在同一个任务里先 `render()` 再取样。
 - 断言「镜头没对着空处」要投影**步骤声明的 `cam.target`**，不能投 `controls.target`：
   后者是让位之后的机位目标，按定义就在画幅正中，那样这一条永远只是在测「中点在中间」。
 
@@ -484,8 +473,6 @@ steps/      步骤内容                        通过 ctx 取用以上全部
 | 主 | <https://build-bike.vercel.app> | 推到 `main` → Vercel 出一次生产部署 |
 | 备 | <https://mrbaoboer.github.io/3D-Bike-Builder/> | `.github/workflows/deploy.yml` → GitHub Pages |
 
-两处都是全自动的，发版之后不需要任何手工步骤。
-
 **线上主地址必须是项目域名表里的那一条，不要用部署别名。** 别名指的是某一个具体部署，
 不跟着生产走，每发一版就掉队一次，而且照样返回 200、标题一样，从外面看不出来。
 判断办法：`vercel domains add <名字>.vercel.app <项目>` 能成，它就是项目域名、会自动跟随；
@@ -495,9 +482,10 @@ steps/      步骤内容                        通过 ctx 取用以上全部
 **核对办法**：`npm run live`（`tools/live-check.mjs`）比对两处首页里那个带内容哈希的
 入口 JS 文件名 —— 一样才是同一份产物，对不上当场退 1。只看「打得开 / 返回 200」是不够的。
 
-生产产物注入一条 CSP，见 `vite.config.js`。改它之后**必须重跑 `npm run smoke`**：
-`connect-src` 少放 `blob:` 的话，GLTFLoader 取不到贴图，而页面看上去还是「能开」。
-CSP 只进构建产物，不进 `index.html` —— 开发期 Vite 靠动态 `<style>` 注样式。
+生产产物注入一条 CSP，见 `vite.config.js`，策略内容与理由见 [SECURITY.md](../SECURITY.md)。
+改它之后**必须重跑 `npm run smoke`**：`connect-src` 少放 `blob:` 的话，GLTFLoader 取不到贴图，
+而页面看上去还是「能开」。CSP 只进构建产物，不进 `index.html` ——
+开发期 Vite 靠动态 `<style>` 注样式。
 
 `vercel.json` 另外发一组安全响应头。缓存分两档：`/assets/` 里的产物带内容哈希，
 给一年 immutable；`/models/` 下那份 GLB **文件名固定、没有哈希**，所以只给七天 ——
