@@ -1,20 +1,12 @@
 /**
- * 冒烟走查：起构建产物 → 双画幅走完全程 → 逐条断言。
+ * 冒烟走查：起构建产物 → 双画幅走完全程 → 逐条断言。抓在浏览器里才现形的错
+ *（契约漂移、取景对空、原语没跑起来），必须真的把车装一遍，不只翻页看标题：
+ * 只查「步骤可达」抓不住 enter() 一进去就抛错，四个交互原语都要真的走一遍。
+ * 不能用 drawImage 直接读 WebGL 画布：没开 preserveDrawingBuffer 时缓冲合成后
+ * 即清，读回来全黑。CI 比开发机慢一个量级，所有等待都要过 tmo()。
+ * 另见 docs/DEVELOPMENT.md「冒烟走查」。
  *
  *   node tools/smoke.mjs [--shots] [--headed]
- *
- * 这一层要抓的是**在浏览器里才会现形**的那类错：契约漂移、取景对空、
- * 交互原语根本没跑起来。所以它必须真的把车装一遍，而不只是翻页看标题。
- *
- * 上一版有两处教训，都写在这儿免得再犯：
- *
- *   · 判「画面不是纯色」曾用 drawImage 读 WebGL 画布。没开 preserveDrawingBuffer 时
- *     那块缓冲在合成后就被清掉了，读回来永远是全黑 —— 十一步全部假失败，
- *     而真正的报错混在里面没人看得见。现在改成：同一个任务里先 render 再 drawImage。
- *   · 它从头到尾没碰过拧螺丝那条路。于是四个步骤 enter() 一进去就抛 TypeError，
- *     冒烟照样报「步骤可达」。现在四个交互原语都要真的走一遍并对账。
- *
- * CI 比开发机慢一个量级，所有等待都要过 tmo()。
  */
 
 import { chromium } from 'playwright';
@@ -41,8 +33,8 @@ const check = (code, title, ok, detail = '') => {
 };
 
 /**
- * 画面的明暗跨度。**必须在同一个任务里先渲染再取样** ——
- * 画布没开 preserveDrawingBuffer，合成之后那块缓冲就归零了。
+ * 画面的明暗跨度。必须在同一个任务里先渲染再取样：
+ * 没开 preserveDrawingBuffer 时缓冲合成后即清，读回来全黑。
  */
 const spread = (page) => page.evaluate(() => {
   const s = window.__ctx.stage;
@@ -105,11 +97,9 @@ async function run(viewport, label, port) {
       const s = window.__engine.current;
       const st = window.__ctx.stage;
       /*
-       * 这一步声明要看的那个点，投到屏幕上落在哪儿：落进界面遮住的那两条边里，
-       * 或者干脆在画幅外，就说明镜头对着空处。
-       *
-       * 必须用步骤声明的 cam.target，不能用 controls.target —— 后者是让位之后
-       * 的机位目标，按定义就落在画幅正中，那样这一条永远只是在测「中点在中间」。
+       * 这一步声明要看的点投到屏幕上落在哪儿：进了界面遮住的边或画幅外，就是对着空处。
+       * 必须投步骤声明的 cam.target，不能投 controls.target —— 后者是让位后的机位目标，
+       * 按定义落在画幅正中，投它只是在测「中点在中间」。
        */
       const t = st.controls.target.clone().set(...s.cam.target).project(st.camera);
       const px = { x: (t.x * 0.5 + 0.5) * innerWidth, y: (0.5 - t.y * 0.5) * innerHeight };
@@ -135,9 +125,8 @@ async function run(viewport, label, port) {
   }
 
   // ── 四个交互原语真的跑一遍 ──
-  //
-  // 走的是降级路径（autoSeat / autoRun），它与手拖共用同一条代码路径，
-  // 只是把指针换成补间 —— 手感测不了，别的全测得了。
+  // 走降级路径（autoSeat / autoRun）：与手拖共用同一条代码路径，只是指针换成补间。
+  // 手感测不了，其余都测得到。
   const slideIn = async (step, part) => {
     await page.evaluate((s) => window.__engine.goToStep(s), step);
     await settled(page).catch(() => {});
@@ -183,9 +172,7 @@ async function run(viewport, label, port) {
   }
 
   // ── 从头到尾装完整台车 ──
-  //
-  // 走的正是用户的那条路：一步步往下按，每一步把剩下的活按「一下一件」演完。
-  // 装完之后对账三件事：每一件精确落回装配位、二十七件七颗全记上账、自检报全部到位。
+  // 按用户那条路走：一步步往下按，每一步把剩下的活按「一下一件」演完，装完再对账。
   const done = await page.evaluate(async () => {
     const c = window.__ctx, e = window.__engine;
     await c.hud.onRestart();
@@ -227,9 +214,8 @@ async function run(viewport, label, port) {
     `${done.自检行数} 行 · 「${done.自检结语}」`);
 
   // ── 从零开始装：在场的件数一路只增不减 ──
-  //
-  // 这是整份课程的骨架。哪一件在第几步出现由步骤自己声明的 installs 现推，
-  // 一旦某一步漏声明，它就会从头到尾挂在画面上 —— 而那正是「从零开始」失效的样子。
+  // 哪一件在第几步出现由步骤声明的 installs 现推；漏声明一件，它会从头到尾
+  // 挂在画面上，「从零开始」随之失效。
   const grow = await page.evaluate(async () => {
     const c = window.__ctx, e = window.__engine;
     const seq = [];
@@ -275,12 +261,9 @@ async function run(viewport, label, port) {
     JSON.stringify(oneAtATime));
 
   // ── 对角拧紧真的在判 ──
-  //
-  // 这是三个签名交互之一，而它曾经整个失效过：bom.crossPairs 发的是紧固件对象，
-  // screw._mate 拿它跟 id 字符串比，恒不相等 —— 于是「这一颗是不是上一颗的对角」
-  // 恒假，每一组的第二、第四颗都被判成拧错，结尾自检永远多报一行，
-  // 而用户完全是按对角拧的。上一版冒烟只查了「四颗都记上账」，一句没问顺序，
-  // 所以整整一版没人发现。这一条两头都要过：拧对了要认，拧错了要抓。
+  // 对角判定走 crossPairs 的 id 配对，类型发错（对象 vs id）时判定恒假，
+  // 而「四颗都记上账」照样通过 —— 只查记账抓不住它。
+  // 所以两头都要过：拧对了要认，拧错了要抓。
   const cross = await page.evaluate(async () => {
     const c = window.__ctx, e = window.__engine;
     const run = async (order) => {
@@ -305,14 +288,10 @@ async function run(viewport, label, port) {
     cross.good === true && cross.bad === false, JSON.stringify(cross));
 
   // ── 拆开那一步，二十七件每一件都得看得见 ──
-  //
-  // 这一步唯一的任务是回答「这台车由多少东西组成」，那就得真的数得出来。
-  // 上一版沿装配方向一律退同样一段，而二十七件里十五件都是从侧面装的 ——
-  // 它们全落到左右两个平面上摞成两摞，实测二十三件在屏幕上露不到三成，
-  // 而所有断言照样通过：摊是摊开了，看还是看不见。
-  //
-  // 判据取像素：整幅渲染两次（有这一件 / 没这一件），差出来的就是它露在最前面的部分。
-  // （这一份不投影，所以逐像素差里没有阴影贴图重采样的噪点，见 render/stage.js。）
+  // 「摊开了」不等于「看得见」：从侧面装的十五件两两镜像，容易在左右两个平面上
+  // 摞成两摞，位移断言全过而大半件露不出来。判据取像素：整幅渲染两次
+  //（有这一件 / 没这一件），差出来的就是它露在最前面的部分。
+  //（场景不投影，逐像素差里没有阴影贴图重采样的噪点，见 render/stage.js。）
   const seen = await page.evaluate(async () => {
     const c = window.__ctx, e = window.__engine;
     await e.goToStep('A2');
@@ -358,12 +337,9 @@ async function run(viewport, label, port) {
       : `最小 ${seen[0].front}px · 中位 ${median}px · 最大 ${seen[26].front}px`);
 
   // ── 整车那几张不许裁边 ──
-  //
-  // 声明 showAll 的四步（首屏成品照、爆炸图、出门前自检、收尾）画的都是整台车，
-  // 它必须完整落在画幅里 —— 这几张同时也是 README 的截图。
-  // 早先它们用一对手写的取景常量，把整车半高报小了一成多 ——
-  // 于是打开页面第一眼，后轮下缘就被切掉九十来像素，而全部断言照样通过。
-  // 判据取渲染结果：把画布缩样读回来，非背景像素的外接框不许贴到画幅四边。
+  // 声明 showAll 的四步画的都是整台车，必须完整落在画幅里（这几张也是 README 的截图）。
+  // 取景常量报小一成就会裁掉轮缘，而几何断言抓不住 —— 判据取渲染结果：
+  // 画布缩样读回来，非背景像素的外接框不许贴到画幅四边。
   const whole = await page.evaluate(async () => {
     const c = window.__ctx, e = window.__engine;
     const out = [];
@@ -404,10 +380,8 @@ async function run(viewport, label, port) {
     cut.length ? cut.map((w) => `${w.id} 贴边`).join('、') : `${whole.length} 张`);
 
   // ── 摊开那一步：指到哪件，报哪件的名字 ──
-  //
-  // 摊开只回答了「有多少」。指哪儿说哪儿，才回答得了「都是些什么」。
-  // 取样点用每件自己那几块网格的投影中心 —— 不是包围盒中心：
-  // 油管、座管这类件的节点原点离它的几何有一米远，拿盒中心去指会指到空处。
+  // 取样点用每件网格的投影中心，不用包围盒中心：油管、座管这类件的节点原点
+  // 离它的几何有一米远，拿盒中心去指会指到空处。
   const spots = await page.evaluate(async () => {
     const c = window.__ctx, e = window.__engine, s = c.stage;
     await e.goToStep('A2');
@@ -461,30 +435,20 @@ async function run(viewport, label, port) {
     wrong.length ? `报了清单里没有的名字：${wrong.join('、')}`
       : `${named} / ${spots.length} 处报出名字 · 翻页后${cleared ? '已收起' : '还挂着'}`);
 
-  // ── 运镜：不许跳切，而且要绕过去不是穿过去 ──
-  //
-  // 这一份说明书全靠「同一台车，镜头挪过去」把二十九步串成一件事。
-  // 一步一跳切，看的人每一步都得重新找一遍「这是车上的哪儿」。
-  //
-  // 两条判据：
-  //   排了一趟   每次换步都得排出一段有时长的运镜（除非两步机位本来就一样），
-  //              而不是把相机瞬间摆过去；
-  //   走的是弧   全程离主体最近时，不许比两头那个较近的距离还近。
-  //              绕着转过去的话这个比值恒在 1.0 往上（中段还会往外鼓一点）；
-  //              世界坐标直线插值转半圈时相机笔直穿过整台车，它会掉到零附近。
-  //              **判距离而不是判路程**：路程要逐帧累加，帧率一低就把弧量成了直线
-  //              （实测线上跑出过 1.02，紧贴阈值），而距离只要采到中段就一定露馅。
-  // 外加：每一趟都要**分毫不差地落在**这一步该在的机位上，否则「最佳姿态」是空话。
+  // ── 运镜：不许跳切，要绕过去不是穿过去，且分毫不差落在该到的机位 ──
+  // 判据：每次换步都得排出一段有时长的运镜（两步机位相同除外）；全程离主体
+  // 最近的距离不小于两头较近者 —— 绕过去比值在 1.0 往上，世界坐标直线插值
+  // 穿车时掉到零附近。判距离而不是判路程：路程要逐帧累加，帧率一低就把弧
+  // 量成直线、紧贴阈值，而距离只要采到中段就一定露馅。
   const flight = await page.evaluate(async () => {
     const c = window.__ctx, e = window.__engine, s = c.stage;
     const wrap = (d) => ((d % 360) + 540) % 360 - 180;
     const azOf = (i) => e.steps[i].cam?.az ?? 0;
 
     /*
-     * 逐帧采样，而不是等 go() 回来再读一次 shot。
-     * go() 会 await 这一步的 enter()，而「拆开看看」的 enter 要演两秒六 ——
-     * 等它回来时那趟运镜早跑完了，shot 已经置空，读出来是「时长 0」，
-     * 看着就像跳切，其实是量晚了。
+     * 逐帧采样，不能等 go() 回来再读 shot：go() 会 await 这一步的 enter()
+     *（「拆开看看」要演两秒六），返回时运镜已跑完、shot 已置空，
+     * 读出来是时长 0，误判成跳切。
      */
     const hop = async (i) => {
       let dur = 0;
@@ -511,7 +475,7 @@ async function run(viewport, label, port) {
         id: e.steps[i].id,
         dur,
         moved: from.distanceTo(s.camera.position),
-        // 全程离主体最近时还剩两头那个较近值的几成 —— 绕过去是 1.0 往上，穿过去会掉到零附近
+        // 全程最近距离 / 两头较近距离：绕过去在 1.0 往上，穿过去掉到零附近
         clear: minR / Math.max(1e-6, Math.min(d0, d1)),
         land: s.camera.position.distanceTo(s.recommend.pos),
       };
@@ -533,9 +497,8 @@ async function run(viewport, label, port) {
     return out;
   });
   /*
-   * 「跳切」的定义：镜头**明显挪了位置，却没有排运镜**。
-   * 挪得看不出来的那几趟是故意不动画的 —— 为一次不可见的位移跑半秒动画，
-   * 只会让人以为「有什么变了」而重新找一遍画面。见 stage.js 的 TINY。
+   * 跳切 = 明显挪了位置却没排运镜。不可见的位移是故意不动画的
+   *（见 stage.js 的 TINY），不算跳切。
    */
   const jumped = flight.filter((f) => f.dur < 0.3 && f.moved > 0.05);
   const missed = flight.filter((f) => f.land > 0.01);
@@ -572,9 +535,8 @@ async function run(viewport, label, port) {
   // ── 键盘 ──
   const kb = await page.evaluate(async () => {
     const e = window.__engine;
-    // 等到这一步真的铺完。固定睡几百毫秒是不行的：「拆开看看」进场要演两秒多，
-    // 睡醒时引擎还忙着，这时按下的那一下会被攒起来晚一点才补 ——
-    // 断言在补上之前读数，看着就像方向键失灵，而它其实工作得好好的
+    // 要等 busy 清掉，不能固定睡几百毫秒：引擎还忙时按下的那一下会被攒着晚补，
+    // 断言在补上之前读数，就误判成方向键失灵
     const idle = async () => {
       for (let k = 0; k < 200; k++) {
         if (!e.busy) return;
