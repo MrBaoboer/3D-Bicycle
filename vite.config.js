@@ -4,7 +4,6 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 /**
  * 开发期探针：页面把 canvas 的 dataURL POST 过来，落到 .shots/。
  * 用于无法直接截屏的环境（面板隐藏时 rAF 停摆，外部截屏拿到的是旧帧）。
- * apply: 'serve' —— 不进生产构建。
  */
 const devShot = () => ({
   name: 'dev-shot',
@@ -32,13 +31,9 @@ const devShot = () => ({
 });
 
 /**
- * 内容安全策略，**只进生产产物**。
- *
- * 这个页面不取任何外部资源：脚本与样式是打包出来的、模型在 public/ 下同源、
- * 音效是 Web Audio 现场合成的、图标是内联 SVG。既然如此，把门关死没有代价。
- * data: 留给首页那枚 SVG favicon。
- *
- * 不能写进 index.html —— 开发期 Vite 靠动态 <style> 注样式，
+ * 内容安全策略，只进生产产物。页面不取任何外部资源，关死没有代价；
+ * img-src 的 data: 留给首页那枚 SVG favicon。策略与理由见 SECURITY.md。
+ * 不能写进 index.html：开发期 Vite 靠动态 <style> 注样式，
  * `style-src 'self'` 会把它整个挡下来，`npm run dev` 当场白屏。
  */
 const CSP = [

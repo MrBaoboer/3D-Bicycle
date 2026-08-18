@@ -1,29 +1,17 @@
 /**
- * 界面层
- *
- * 全屏三维，界面退到四周：顶上一行说走到哪了，两侧各一枚翻页，
- * 右边一列放读数与「为什么」，底部一句旁白。**没有底部条** ——
- * 一条横贯屏幕的实底会把画面切掉一截，而画面正是这份说明书要说的全部。
- *
- * 覆盖层只有两种形态：
- *   卷 sheet —— 盖住画面，讲一件需要专心看的事；
- *   坞 dock  —— 停在底部，把画面完整让出来。
- *
- * 这一层不认识自行车：只收字符串、数字，和三维里的一个点。
- *
- * 整层 DOM 由这个文件自己生成，index.html 只留画布与封面 ——
- * 类名、无障碍属性和用到它们的代码写在一处，改一个名字不用两边对齐。
+ * 界面层。全屏三维，界面退到四周，没有底部实底条 —— 画面是主角。
+ * 覆盖层两种形态：卷 sheet 盖住画面讲一件事；坞 dock 停在底部让出画面。
+ * 这一层不认识自行车，只收字符串、数字和三维里的一个点。
+ * 整层 DOM 由本文件生成，index.html 只留画布与封面。
  */
 
 import * as THREE from 'three';
 import { icon } from './icons.js';
 
 /**
- * 怎么操作。前四条第一次进来就该知道，后两条留给右上角的完整版。
- * touch 是触屏机型的替换句。
- *
- * 左边那一栏分两种：`keys` 是真的按键，画成键帽；`ico` 是手势与界面元件，
- * 画成一枚圆图标。混成一种的话，「转画面」会长得像键盘上有个「转」键。
+ * 怎么操作。前四条首次进入就给，带 full 的留给右上角的完整版；
+ * touch 是触屏机型的替换句。keys 画成键帽，ico 画成圆图标 ——
+ * 混成一种，「转画面」会长得像键盘上有个「转」键。
  */
 const GUIDE = [
   { keys: ['arrow-left', 'arrow-right'], t: '翻到上一步、下一步。键盘 <em>←</em> <em>→</em> 一样管用',
@@ -77,15 +65,9 @@ const BOLT = {
 const shortName = (s) => String(s || '').split('·').pop().trim();
 
 /*
- * 常驻界面的骨架。没有底部条 —— 画面是主角，界面只在四周留下最少的几笔。
- *
- *   顶      走到哪一章、哪一步 —— 只读，不动手
- *   左右    翻页，垂直居中，贴着边
- *   右侧列  这一步的读数与「为什么」
- *   底部    一句旁白，以及需要动手时才出现的那一个按钮。都不带底色
- *
- * 旁白只有一行，且是唯一一处常驻文字。这一份要让人**看懂**，
- * 该说的话由动画说 —— 文字只负责点一下「现在看哪儿」。
+ * 常驻界面骨架：顶部章节与步名（只读）、两侧翻页、右侧列读数与「为什么」、
+ * 底部一句旁白加需要时才出现的任务按钮，都不带底色。
+ * 旁白是唯一一处常驻文字 —— 该说的话由动画说，文字只点一下「现在看哪儿」。
  */
 const SHELL = `
 <header class="topbar" data-quiet="0">
@@ -202,11 +184,8 @@ export class HUD {
   // ══════════════ 让位 ══════════════
 
   /**
-   * 量一下界面实际占掉了画面的哪几条边，交给 stage.setSafeArea。
-   *
-   * 不是装饰性的细节：一排螺丝摊在底下时，三维若不知道自己只剩上面那块，
-   * 正在拧的那颗螺栓就会被读数压住 —— 而这一步要看的正是它。
-   * 宽屏上右边那张说明卡同理，它有 300 px 宽。
+   * 量出界面实际占掉的四条边，交给 stage.setSafeArea —— 三维据此让位。
+   * 判据一律用几何而不是元素身份，理由见 docs/DEVELOPMENT.md「界面遮住多少画面」。
    */
   #syncSafe() {
     const vh = innerHeight;
@@ -227,15 +206,10 @@ export class HUD {
 
     let bottom = barH;
     /*
-     * 除了底部条，还要算上**叠在它上面、又正好挡着主体**的那些：坞、窄屏的读数区。
-     *
-     * 两道判据缺一不可：
-     *   贴底 —— 下沿离屏幕底不超过一条底部条再加一点。少了它，一个摆在右上角的
-     *           读数区也会被算成「底部占了 632 像素」，三维于是以为自己只剩上面
-     *           一小条，把主体整个顶出画面。
-     *   挡道 —— 与画面横向中间那一半有重叠。车是横向居中的，缩在右下角的读数
-     *           挡不到它；把那 270 像素也算进去，整车就被无谓地推上去一大截。
-     * 判据用几何而不是元素身份：谁摆在哪由 CSS 说了算，这里不该假设。
+     * 叠在底部条上、又挡着主体的（坞、窄屏读数区）也算进 bottom。
+     * 两道判据缺一不可：贴底（下沿离屏幕底不超过一条底部条再加一点，
+     * 否则右上角的读数区也会被算成「底部占了几百像素」）；
+     * 挡道（与画面横向中间那一半有重叠，否则缩在角落的也让主体无谓上移）。
      */
     const reach = barH + 24;
     const midL = innerWidth * 0.25;
@@ -250,17 +224,10 @@ export class HUD {
     this.el.overlay.querySelectorAll('.dock').forEach(rise);
 
     /*
-     * 右边那一列。判据同样用几何而不是元素身份：贴着右缘、且高得能挡住主体，
-     * 才算「右边被占掉了」。窄屏上这一列是横铺在底部的，左沿落在屏幕左半边，
-     * 这一条自然不成立 —— 它已经算进 bottom 里了，再算一次会让车横着缩一半。
-     *
-     * **按它真正盖住的那几行折算，不按它的宽度全额算。**
-     * 让位有两件事：别被盖住，以及落在剩下那块的正中。一张摆在右上角、
-     * 只有一百七十像素高的说明卡，第一件事早就成立了 —— 主体在它下方半屏处，
-     * 根本碰不着；可全额算的话第二件事会把主体整整推左 166 像素，
-     * 而那正是「螺丝没在画面正中」的来源：面盖那四颗因此偏出屏幕中线 215 像素。
-     * 乘上「卡片高 ÷ 可用画面高」之后，一条从头到脚的侧栏仍然全额让位，
-     * 右上角那张小卡只让掉它真正占着的那一档。
+     * 右边那一列：贴着右缘、且高得能挡住主体，才算占边。窄屏上它横铺在底部、
+     * 左沿落在屏幕左半边，这一条自然不成立（已算进 bottom，再算会让车横着缩一半）。
+     * 让位量按「卡片高 ÷ 可用画面高」折算：从头到脚的侧栏全额让位，
+     * 右上角一张小卡只让它真正占着的那一档 —— 全额算会把主体推离屏幕中线。
      */
     const freeH = Math.max(1, vh - top - bottom);
     let right = 0;
@@ -282,10 +249,10 @@ export class HUD {
   // ══════════════ 章节 ══════════════
 
   /**
-   * 用步骤表铺出顶部的章节导航：每一章一段，每一步一格，格子都能点。
+   * 用步骤表铺出顶部章节导航：每一章一段，每一步一格，格子都能点。
    * @param {object[]} steps
-   * @param {string[]} names 章节名，由内容层提供 —— 这一层不认识自行车，
-   *   自带一份就会与内容各存一套，对不上的那几章会被静默并掉
+   * @param {string[]} names 章节名，由内容层提供，必传 ——
+   *   界面自带一份就是两套账，对不上的章会被静默并掉
    */
   setChapters(steps, names) {
     if (!Array.isArray(names) || !names.length) {
@@ -300,11 +267,8 @@ export class HUD {
       byPhase[p].push({ i, s });
     });
 
-    /*
-     * 整条轨只占一个 Tab 位，进去之后用方向键在格子之间走（roving tabindex）。
-     * 二十九个格子各占一个 Tab 位的话，键盘用户要按二十九下才够得着「下一步」，
-     * 而那是全程唯一的前进入口。
-     */
+    // 整条轨只占一个 Tab 位，轨内用方向键走格子（roving tabindex）——
+    // 二十九个格子各占一位，键盘用户要按二十九下才够得着「下一步」
     this.el.chapters.innerHTML = byPhase.map((list, p) => `
       <div class="ch" data-p="${p}">
         <div class="ch-ticks">${list.map(({ i, s }) => `
@@ -328,9 +292,8 @@ export class HUD {
       ticks[to]?.focus();
     });
 
-    // 每一章按它有几步分宽度。五章等宽的话，只有一步的那章会摊出一格很宽的方块，
-    // 而「点一下跳到那一步」正是引导里写着的用法 —— 宽窄本身就是进度。
-    // 只能走 CSSOM：产物的 CSP 是 style-src 'self'，模板里写 style="…" 会被当场挡下
+    // 每一章按步数分宽度 —— 宽窄本身就是进度。
+    // 只能走 CSSOM：产物 CSP 是 style-src 'self'，模板里的 style="…" 会被挡下
     this.el.chapters.querySelectorAll('.ch').forEach((el, p) => {
       el.style.flexGrow = String(byPhase[p].length || 1);
     });
@@ -339,7 +302,7 @@ export class HUD {
       const t = e.target.closest('.tick');
       if (t) this.onJump?.(+t.dataset.i);
     });
-    // 悬停与键盘焦点都要报出步名 —— 这一排格子只有 2px 高，看不出哪一格是哪一步
+    // 悬停与键盘焦点都报出步名 —— 格子只有 2px 高，看不出哪一格是哪一步
     for (const ev of ['pointerover', 'focusin']) {
       this.el.chapters.addEventListener(ev, (e) => {
         const t = e.target.closest('.tick');
@@ -373,9 +336,9 @@ export class HUD {
   setStep(index, total, title) {
     this.el.stepno.textContent = index >= 0 ? `${String(index + 1).padStart(2, '0')}／${total}` : '';
     this.el.steptitle.textContent = title || '';
-    // 顶上那两行是给眼睛看的「走到哪了」，读屏看不见它变 —— 单独报一句
+    // 顶栏的变化读屏看不见 —— 单独报一句
     this.el.srStep.textContent = index >= 0 ? `第 ${index + 1} 步，共 ${total} 步：${title || ''}` : '';
-    // 格子的三种状态只有明暗之分，读屏读不出来 —— 名字里带上状态，当下那一格再挂 aria-current
+    // 格子的三种状态只有明暗之分 —— 名字里带上状态，当下那一格挂 aria-current
     this.el.chapters.querySelectorAll('.tick').forEach((t) => {
       const i = +t.dataset.i;
       const state = i < index ? 'done' : i === index ? 'now' : 'next';
@@ -400,14 +363,10 @@ export class HUD {
   // ══════════════ 提示与短讯 ══════════════
 
   /**
-   * 顶上那一行操作提示：告诉手该做什么。<em> 标动作词，<b> 标计数。
-   *
-   * 这是读屏用户唯一能听到「现在该做什么」的地方，所以它是个 live region。
-   * 但拧螺丝的计数（「第 2 颗 / 共 4 颗」）一步里能改十几次，全播出来就是噪音。
-   * 计数类的更新传 quiet：照常写进 DOM 给眼睛看，写的那一下把播报关掉。
-   *
-   * @param {string} html
-   * @param {string} [ico] 图标名，见 ui/icons.js
+   * 底部那一行旁白。它是读屏用户唯一听得到「现在该做什么」的 live region；
+   * 拧螺丝的计数一步里能改十几次，计数类更新传 quiet ——
+   * 照常写进 DOM 给眼睛看，写的那一下关掉播报。
+   * @param {string} text
    * @param {{quiet?:boolean}} [o]
    */
   setCue(text, { quiet = false } = {}) {
@@ -487,10 +446,8 @@ export class HUD {
   }
 
   /**
-   * 宽屏默认摊开，窄屏默认收着 —— 手机上它一摊开就吃掉半块画面，
-   * 而这张卡片是「想知道为什么」的人才看的，画面才是每一步都要看的。
-   *
-   * 换了画幅要能重判：只在 setNote 时判一次的话，横过屏幕之后卡片会僵在上一档的状态。
+   * 宽屏默认摊开，窄屏默认收着 —— 手机上它一摊开就吃掉半块画面。
+   * 换画幅要重判，否则转屏之后卡片僵在上一档的状态。
    */
   #layoutNote(reset = false) {
     if (!this._note) return;
@@ -502,10 +459,7 @@ export class HUD {
     this.#dropNoteRect();
   }
 
-  /**
-   * 窄屏那枚开合钮。标签固定写「为什么」，不印卡片标题 ——
-   * 标题长到十几个字，塞进顶栏那一行会把步名挤没。
-   */
+  /** 窄屏那枚开合钮。标签固定写「为什么」—— 卡片标题会把顶栏的步名挤没 */
   #paintNoteTab() {
     const b = this.el.noteTab;
     b.innerHTML = icon('help') + '<span>为什么</span>';
@@ -574,8 +528,8 @@ export class HUD {
     const key = list.map((b) => b.id).join('|');
     if (key !== this._boltKey) {
       this._boltKey = key;
-      // ul 上补 role="list"：CSS 一去掉列表符号，Safari 就不再把它当列表播报，
-      // 「四颗里的第二颗」这层信息正是这一步的全部意思
+      // role="list" 必须补：CSS 去掉列表符号后 Safari 不再当列表播报，
+      // 而「四颗里的第二颗」正是这一排的意思
       ul.innerHTML = list.map((b) =>
         `<li class="bolt"><i class="bolt-dot"></i><span class="bolt-nm">${shortName(b.name)}</span></li>`).join('');
       ul.setAttribute('aria-label', `${list.length} 颗螺丝`);
@@ -623,7 +577,7 @@ export class HUD {
     this.el.menu.setAttribute('aria-expanded', 'true');
     m.querySelector('button')?.focus();
 
-    // 键盘：上下移焦；Tab 移出菜单即收起 —— 菜单不该悬在已经失焦的页面上
+    // 上下移焦；Tab 移出菜单即收起
     m.addEventListener('keydown', (e) => {
       if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
       e.preventDefault();
@@ -652,7 +606,7 @@ export class HUD {
       if (b.dataset.k === 'restart') this.onRestart?.();
     });
 
-    // 点到菜单以外才收起。判定必须排除菜单自身 —— pointerdown 一旦把菜单摘出 DOM，
+    // 点到菜单以外才收起。判定要排除菜单自身：pointerdown 摘掉菜单后，
     // 随后的 click 就落不到开关上了
     this._away = (e) => { if (!m.contains(e.target)) this.closeMenu(); };
     addEventListener('pointerdown', this._away, true);
@@ -660,7 +614,7 @@ export class HUD {
 
   closeMenu() {
     if (!this._menu) return;
-    // 先置空再移除：移除会同步触发 focusout，那个监听里还会再叫一次 closeMenu
+    // 先置空再移除：移除会同步触发 focusout，那里还会再调一次 closeMenu
     const m = this._menu;
     this._menu = null;
     const hadFocus = m.contains(document.activeElement);
@@ -735,8 +689,7 @@ export class HUD {
     const h = { el, lb, pos: pos.clone(), active };
     el.addEventListener('click', () => {
       h.active = !h.active;
-      // 一次只摊开一张：一步里钉三四枚圆点是常事，几张不透明的签在屏幕上只差几十像素，
-      // 后点开的那张还会被更早创建的压在下面 —— 点了没反应，比拥挤更糟
+      // 一次只摊开一张：几张签只差几十像素，后点开的还会被更早创建的压在下面
       if (h.active) {
         for (const s of this.spots) {
           if (s === h || !s.active) continue;
@@ -763,21 +716,17 @@ export class HUD {
 
   updateSpots(camera) {
     if (!this.spots.length) return;
-    // 知识卡片是一张不透明的纸，层级还压过标注 —— 只避视口右缘不够，签会被它整块吃掉。
-    // 把它的实际矩形当成右边界。
-    //
-    // 量一次就存着：这个函数紧接着要写十几个元素的 style，每帧再读一次布局就是读写交替，
-    // 等于每帧强制一次重排。那张纸在一步之内是不动的。
+    // 知识卡片不透明且层级压过标注，它的实际矩形要当成右边界。
+    // 量一次就存着：本函数每帧要写十几个 style，再读布局就是每帧一次强制重排
     if (this._noteRect === undefined) {
       this._noteRect = (!this.el.note.hidden && this.el.note.getClientRects().length)
         ? this.el.note.getBoundingClientRect() : null;
     }
     const nb = this._noteRect;
     /*
-     * 标注压在底部那条界面之上，否则它指的东西会被整块糊掉。代价是它也压在任务按钮之上，
-     * 而标注是真按钮 —— 投影一旦落进界面占掉的那两条边里，它就会替按钮把点击吃掉。
-     * 落进去就藏起来：那块地方本来就被界面盖着，看不见的标注也点不着。
-     * 藏了不会卡住任何一步 —— 翻页从来不被拦。
+     * 标注层级压过底部界面（否则它指的东西被糊掉），代价是也压过任务按钮 ——
+     * 投影落进界面占掉的边里时要藏起来，不然会替按钮把点击吃掉。
+     * 藏了不卡步骤：翻页从来不被拦。
      */
     const ceil = this._safe.top + 8;
     const floor = innerHeight - this._safe.bottom - 8;
@@ -803,17 +752,10 @@ export class HUD {
   // ══════════════ 覆盖层 ══════════════
 
   /*
-   * 覆盖层分两层。
-   *
-   * 底层归这一步自己：清点零件的坞、选工具的坞。
-   * 上层归随时可能盖上来的那一页：怎么操作。
-   *
-   * 上层收起时底层原样回来。少了这一条，在「坞是唯一前进入口」的那几步里打开菜单看一眼
-   * 怎么操作，回来坞就没了，而底部提示还在说「挑一把扳手」。
-   *
-   * onGone：这一层不在了（被收起、被同层的另一页顶掉、或整个清空）时调一次。
-   * 坞不夺焦点也不挡菜单，摊着它照样能点右上角，所以一个上层可以被另一个上层直接顶掉 ——
-   * 顶掉时没人通知它，状态就会卡在「以为自己还开着」，而它的控件已经没了。
+   * 覆盖层分两层：底层归这一步自己（各种坞），上层归随时盖上来的「怎么操作」。
+   * 上层收起时底层原样回来 —— 否则在坞是唯一前进入口的步骤里看一眼帮助，
+   * 回来坞就没了。onGone 在层被收起、被同层顶掉或整个清空时调一次：
+   * 上层可以被另一个上层直接顶掉，不通知的话它会以为自己还开着。
    */
   showOverlay(html, { veil = true, onMount, onEsc, onGone, top = false } = {}) {
     // 每一层各记各的「从哪儿来的」：收起时焦点要回到打开它的那个控件，而不是掉到 body 上
@@ -865,10 +807,8 @@ export class HUD {
 
   /**
    * 模态打开时，背后的常驻界面退出无障碍树与 Tab 序列。
-   *
-   * 名单里必须带上封面与三维标注：
-   *   · 封面还在化开的那一秒，Tab 两下就能按到背后的「开始装车」；
-   *   · 标注是挂在覆盖层之后的真按钮，从卷里的「知道了」按一下 Tab 就落到它们身上。
+   * 封面与三维标注也在名单里：封面化开的那一秒、以及挂在覆盖层之后的标注按钮，
+   * 都还够得着 Tab。
    */
   #setChromeInert(on) {
     for (const el of [this.el.topbar, this.el.foot, this.el.readout,
@@ -912,9 +852,8 @@ export class HUD {
   }
 
   /**
-   * 焦点交还给打开这一层的那个控件。它可能已经不在了（首次进入的引导卷是封面
-   * 打开的，收起时封面正在化开、按钮已经禁用）—— 那就交给「下一步」，
-   * 它是全程唯一的前进入口，总比掉回 body 强。
+   * 焦点交还给打开这一层的控件；它可能已经不在了（首次进入的引导卷
+   * 由封面打开，收起时封面正在化开）—— 那就交给「下一步」，不掉回 body。
    */
   #handBack(from) {
     if (from?.isConnected && !from.disabled && !from.hidden) { from.focus(); return; }
@@ -955,9 +894,8 @@ export class HUD {
   get modalOpen() { return this.overlayOpen && this.el.overlay.classList.contains('veil'); }
 
   /**
-   * 整层界面退场，只剩车。封面还挡着的那一段走的就是这一档。
-   * 两枚翻页各自 fixed 在屏幕两侧、不在底部那一块里 —— 漏掉它们的话，
-   * 封面让开半边之后，右边缘会孤零零挂着一枚指向下一步的箭头。
+   * 整层界面退场，只剩车 —— 封面还挡着的那一段走这一档。
+   * 两枚翻页各自 fixed 在屏幕两侧，也要一并收起。
    */
   showChrome(v) {
     this._chrome = !!v;

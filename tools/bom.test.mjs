@@ -1,10 +1,6 @@
 /**
- * 装配清单读取层的单测 —— core/bom.js。
- *
- * 这一层的三件事都是「错了不会当场报，只会让画面莫名其妙」的类型：
- * 对角配对错了，交叉拧紧那一课就悄悄教错；拓扑排序成环，分步流程直接卡死；
- * 向量共用没冻住，某处顺手 negate 一下，别处的装配方向跟着反。
- * 所以这三件必须在浏览器之外被钉住。
+ * core/bom.js 的单测：对角配对、拓扑排序、向量冻结。
+ * 三者出错都不在浏览器里报错，只表现为画面异常，必须在 Node 里钉住。
  *
  *   node --test tools/bom.test.mjs
  */
@@ -49,9 +45,8 @@ test('裸数组变成冻结的 Vector3，原始 JSON 一个字节都不动', () 
   const p = bom.part('p1');
   assert.equal(p.install.v.dir.y, 1);
   assert.ok(Object.isFrozen(p.install.v.dir));
-  // 冻住是为了防「同一个实例发给四个原语，谁顺手 negate 一下别处就反了」
+  // 冻结防止共享实例被某处 negate 后，别处的装配方向跟着反
   assert.throws(() => { p.install.v.dir.y = -1; }, TypeError);
-  // 原始数组仍是数组，且没被替换成向量
   assert.deepEqual(src.parts[0].install.dir, [0, 1, 0]);
 });
 
@@ -71,9 +66,7 @@ test('order() 只为满足 needs 而动，互不相干的两件保持清单书�
     ],
   }));
   /*
-   * 清单写的是 c、a、b，而 c 需要 a。
-   * 只有 a 被提到 c 之前 —— 这是硬约束逼出来的。
-   * c 与 b 互不相干，就仍按清单里的先后待着（c 在 b 前）：
+   * 清单序 c、a、b，c 需要 a：只有 a 被提前，c 与 b 保持书写先后。
    * 书写顺序是作者定的讲述顺序，没有约束逼迫时不该被排序打乱。
    */
   assert.deepEqual(bom.order(), ['a', 'c', 'b']);
@@ -127,7 +120,7 @@ test('needs 指向不存在的件时抛错', () => {
   assert.throws(() => bom.order(), /needs 指向 "无"/);
 });
 
-// ── 对角配对：交叉拧紧这一课全靠它 ──
+// ── 对角配对：交叉拧紧的判定基础 ──
 
 const cross = (points) => seed({
   fasteners: points.map((point, i) => ({
@@ -144,13 +137,8 @@ test('crossPairs 把中心对称的两颗配成一对', () => {
 });
 
 /*
- * 发出去的必须是 id，不是紧固件对象。
- *
- * 曾经发的是对象，而唯一的调用方（interact/screw.js 的 _mate）拿它跟一个 id
- * 字符串比 —— 恒不相等，_mate 永远返回 null。后果不是「少了个优化」：
- * 「这一颗必须是上一颗的对角」这条判定从此恒假，每一组的第二、第四颗都被
- * 判成拧错了顺序，结尾自检永远多出一行「面盖有一颗没按对角顺序上」，
- * 而用户完全按对角拧的。整个项目的三个签名交互之一就这么静默失效。
+ * crossPairs 必须发 id：调用方（interact/screw.js 的 _mate）拿它与 id 字符串比，
+ * 发成对象则恒不相等，对角判定静默失效。见 docs/DEVELOPMENT.md「容易写反的签名」。
  */
 test('crossPairs 发出的是 id，不是紧固件对象', () => {
   const bom = new Bom(cross([[0, 1, 1], [0, -1, -1], [0, 1, -1], [0, -1, 1]]));

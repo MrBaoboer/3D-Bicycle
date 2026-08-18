@@ -1,73 +1,21 @@
 /**
- * 清单 × 模型 对账 —— assets/bike.manifest.json ↔ public/models/CarbonFrameBike.glb
+ * 清单 × 模型 对账：assets/bike.manifest.json ↔ public/models/CarbonFrameBike.glb。
+ * 两边走散（节点改名、向量长度不是 1、needs 成环）不会在浏览器里报错，
+ * 只表现为装配异常，所以在 Node 里逐条对账，对不上退 1。
+ * 不依赖 three 与浏览器：GLB 只解容器的 JSON 块，够拿到全部节点名。
  *
  *   npm run verify        # 或 node tools/check-manifest.mjs [清单路径] [模型路径]
- *
- * 说明书里每一步「把哪个零件、沿哪个方向、装到哪儿、拧几颗螺栓」全靠这份清单。
- * 清单是手写的、模型是买来的，两边随时会走散：模型里的节点名一改，清单还指着旧名；
- * 方向向量顺手填成 [0,0,1.2]，动画就会以 1.2 倍速度飞过去；needs 写出一个环，
- * 分步流程直接卡死。这些都不会在浏览器里报错，只会表现为「装配看着不对」。
- * 所以先在 Node 里把清单和模型摆到一起逐条对账，对不上当场退 1。
- *
- * 不依赖 three、不依赖浏览器：GLB 只解容器的 JSON 块，够拿到全部节点名。
- *
- * ════════════════════════════════════════════════════════════════════════
- *  assets/bike.manifest.json 的格式（v1）
- * ════════════════════════════════════════════════════════════════════════
- *
- * 顶层：
- *   {
- *     "schema": 1,                                  // 格式版本，本文件认 1
- *     "model": "public/models/CarbonFrameBike.glb", // 仅作记录，实际路径由命令行决定
- *     "parts":     [ …BOM 件… ],
- *     "fasteners": [ …紧固件… ]
- *   }
- *
- * 长度一律用**模型单位**（与 GLB 内的坐标同一套，别混进毫米）；
- * 螺距用 mm，圈数用转数。
- *
- * ── BOM 件 parts[] ──
- *   {
- *     "id":    "front-wheel",              // 全清单唯一，小写连字符
- *     "name":  "前轮",                     // 中文名，直接进旁白与字幕
- *     "nodes": ["RadVorn"],                // 对应的 glTF 节点名，可多个；必须真实存在
- *     "install": {
- *       "kind": "slide",                   // slide 推入 ｜ drop 落入 ｜ press 压入
- *                                          // thread 旋入 ｜ hinge 翻合 ｜ clip 卡扣
- *       "dir":  [0, -1, 0],                // 就位方向：从预备位指向最终位，单位向量
- *       "gap":  0.18,                      // 预备位沿 -dir 退让多远，> 0
- *       "snap": 0.004                      // 吸附阈值，0 < snap < gap
- *     },
- *     "pivot": {                           // 转轴；kind 为 thread / hinge 时必填，其余可省
- *       "point": [0.42, 0.35, 0],          // 轴上一点
- *       "axis":  [0, 0, 1]                 // 轴向，单位向量
- *     },
- *     "fasten": ["qr-front"],              // 该件用到的紧固件 id，可为空数组
- *     "needs":  ["fork"]                   // 前置件 id：这些装完才轮到它，可为空数组
- *   }
- *
- * ── 紧固件 fasteners[] ──
- *   {
- *     "id":     "pedal-left",              // 全清单唯一（与 parts 的 id 不冲突）
- *     "name":   "左脚踏轴",
- *     "tool":   "hex-8",                   // 工具代号：hex-N 内六角 ｜ torx-TN ｜ wrench-N ｜ hand
- *     "thread": "left",                    // 牙向，只能 left / right
- *     "spec":   "M14x1.25",                // 可选；写了就必须与 pitch 对上
- *     "pitch":  1.25,                      // 螺距 mm
- *     "turns":  8,                         // 拧到位的圈数（动画按这个转）
- *     "axis":   [1, 0, 0],                 // 拧入轴向，单位向量
- *     "point":  [-0.17, 0.28, 0.07],       // 轴上一点（螺栓头中心）
- *     "group":  "pedal",                   // 同一组一起拧
- *     "order":  "any"                      // cross 对角交叉 ｜ seq 按数组先后 ｜ any 无所谓
- *   }
- *
- * order 为 cross 的组必须是偶数颗且不少于 4 颗 —— 交叉拧法本来就是「对角成对」，
- * 3 颗或奇数颗没有对角可言。同一 group 内的 order 必须一致。
- *
- * 左右脚踏是本项目的教学要害：**左脚踏是反牙（thread: "left"）**，
- * 顺时针是松、逆时针是紧。id 里同时含 pedal 与 left/li 的紧固件都按左脚踏校验。
- *
- * ════════════════════════════════════════════════════════════════════════
+ */
+
+/*
+ * bike.manifest.json（schema 1）里校验代码读不出的语义：
+ *   长度一律用模型单位（与 GLB 坐标同一套），pitch 用 mm，turns 是拧到位的圈数
+ *  （动画按它转）。顶层 model 仅作记录，实际路径由命令行决定。
+ *   install.kind：slide 推入 / drop 落入 / press 压入 / thread 旋入 / hinge 翻合 / clip 卡扣；
+ *   install.dir 从预备位指向最终位；gap 是预备位沿 -dir 的退让距离；snap 是吸附阈值。
+ *   pivot 是转轴（point 轴上一点、axis 轴向），kind 为 thread / hinge 时必填。
+ *   紧固件：tool 代号 hex-N / torx-TN / wrench-N / hand；point 是螺栓头中心；
+ *   group 同一组一起拧；order：cross 对角交叉 / seq 按数组先后 / any 无所谓。
  */
 
 import { readFileSync, statSync } from 'node:fs';
@@ -81,8 +29,7 @@ export const ORDERS = ['cross', 'seq', 'any'];
 /** order 为 cross 的组的下限：交叉拧法至少 4 颗，且必须成对 */
 export const CROSS_MIN = 4;
 
-// ══ 纯函数 ══════════════════════════════════════════════════════════════
-// 以下这些不碰文件系统、不看 process，单元测试直接喂值就能测。
+// ══ 纯函数：不碰文件系统、不看 process，单测直接喂值 ══════════════════
 
 /**
  * 解 GLB 容器，只取 JSON 块。
@@ -175,13 +122,9 @@ export function missingRefs(deps) {
 }
 
 /**
- * 拓扑排序。输入 { id: [前置 id] }，输出 { order, cycles }。
- *
- *   order  —— 一个合法的安装顺序（前置件排在前面）；有环时只含能排出来的那部分。
- *   cycles —— 每个环一条路径，形如 ['a','b','a']；无环时为空数组。
- *
- * 指向未知 id 的边直接忽略（那是 missingRefs 的活儿），
- * 这样一份既缺引用又成环的清单，两条断言各报各的，不会互相盖掉。
+ * 拓扑排序。输入 { id: [前置 id] }，输出 { order, cycles }：order 是前置在前的
+ * 合法安装序（有环时只含排得出的部分），cycles 每环一条路径，形如 ['a','b','a']。
+ * 指向未知 id 的边直接忽略（归 missingRefs 报）——缺引用与成环各报各的，不互相盖掉。
  */
 export function topoSort(deps) {
   const g = normalizeGraph(deps);
@@ -290,16 +233,9 @@ export function isRightPedalId(id) {
 export const ENGAGE_MM = [3, 30];
 
 /**
- * 旋合长度要在常识范围内：`turns × pitch` 就是这颗螺栓一共旋进去多深。
- *
- * turns 与 pitch 各自为正由 M-01 管，这一条管的是**两者的乘积**：
- * 少于 3 mm 的旋合在现实中夹不住任何东西，多于 30 mm 的在这台车上没有
- * 那么长的螺纹孔 —— 两头都是「数填错了」的信号，而画面上只会表现为
- * 螺栓转了一下就停、或者转了半分钟还在转。
- *
- * 这里曾经校验扭矩三档（0 < 够紧 < 别过 < 滑丝）。那一套连同读数与滑丝
- * 一起撤掉了：它讲的是拧紧工艺，而这一份要教的是「这一件怎么接上那一件」，
- * 却占着一屏最显眼的位置。
+ * 旋合长度 turns × pitch 要在常识范围内。turns 与 pitch 各自为正由 M-01 管，
+ * 这一条管两者的乘积：少于 3 mm 夹不住东西，多于 30 mm 没有那么长的螺纹孔，
+ * 两头都是数填错了的信号，画面上只表现为螺栓转一下就停或转个不停。
  */
 export function threadProblems(fasteners) {
   const out = [];
@@ -367,7 +303,6 @@ export function runChecks(manifest, nodeNames = new Map()) {
   const parts = listOf(manifest?.parts);
   const fasteners = listOf(manifest?.fasteners);
 
-  // ── M-01 结构：字段齐、类型对、id 唯一、枚举合法 ──
   check('M-01', '清单结构完整：字段齐全、类型正确、id 全局唯一、枚举取值合法', () => {
     const p = [];
     if (manifest?.schema !== 1) p.push(`顶层 schema：期望 1，实得 ${short(manifest?.schema)}`);
@@ -444,7 +379,6 @@ export function runChecks(manifest, nodeNames = new Map()) {
     return `${parts.length} 个 BOM 件 · ${fasteners.length} 颗紧固件 · ${seen.size} 个 id 互不相撞`;
   });
 
-  // ── M-02 清单引用的节点名必须真实存在于 GLB 中 ──
   check('M-02', '清单引用的每个 glTF 节点名都真实存在于 GLB 中', () => {
     const p = [];
     const dup = [];
@@ -469,7 +403,6 @@ export function runChecks(manifest, nodeNames = new Map()) {
       + `${dup.length ? ` · 注意重名：${[...new Set(dup)].join('、')}，指过去有歧义` : ''}`;
   });
 
-  // ── M-03 install.dir 必须是单位向量 ──
   check('M-03', '每个 install.dir 都是单位向量（容差 1e-3）', () => {
     const p = [];
     for (const it of parts) {
@@ -483,7 +416,6 @@ export function runChecks(manifest, nodeNames = new Map()) {
     return `${parts.length} 个就位方向长度全为 1 —— 动画位移不会被向量长度悄悄缩放`;
   });
 
-  // ── M-04 pivot.axis / 紧固件 axis 必须是单位向量 ──
   check('M-04', '每个 pivot.axis 与紧固件 axis 都是单位向量（容差 1e-3）', () => {
     const p = [];
     let n = 0;
@@ -500,7 +432,6 @@ export function runChecks(manifest, nodeNames = new Map()) {
     return `${n} 条转轴 / 拧入轴长度全为 1 —— 旋转角度不会被轴长带偏`;
   });
 
-  // ── M-05 引用完整性：needs 与 fasten 指到的 id 都得存在 ──
   check('M-05', 'needs 指向的件与 fasten 指向的紧固件都存在', () => {
     const partIds = new Set(parts.map((it) => it?.id).filter(isStr));
     const fastIds = new Set(fasteners.map((f) => f?.id).filter(isStr));
@@ -524,7 +455,6 @@ export function runChecks(manifest, nodeNames = new Map()) {
     return `${needCount} 条前置引用 + ${fastCount} 条紧固件引用全部落地，无孤儿紧固件`;
   });
 
-  // ── M-06 依赖图无环 ──
   check('M-06', '整张前置依赖图无环（可拓扑排序）', () => {
     const deps = new Map(parts.filter((it) => isStr(it?.id)).map((it) => [it.id, listOf(it.needs)]));
     const { order, cycles } = topoSort(deps);
@@ -538,7 +468,6 @@ export function runChecks(manifest, nodeNames = new Map()) {
     return `${order.length} 件可排成一条合法装配序：${head}${order.length > 4 ? ' → …' : ''}`;
   });
 
-  // ── M-07 旋合长度 ──
   check('M-07', `每颗紧固件的旋合长度 turns × pitch 在 ${ENGAGE_MM[0]}–${ENGAGE_MM[1]} mm 之间`, () => {
     raise(threadProblems(fasteners));
     const rows = fasteners.map((f) => `${f.id} ${(f.turns * f.pitch).toFixed(1)} mm`);
@@ -546,7 +475,6 @@ export function runChecks(manifest, nodeNames = new Map()) {
       + `${rows.length ? `（如 ${rows.slice(0, 3).join('、')}）` : ''}`;
   });
 
-  // ── M-08 牙向枚举 + 左脚踏反牙 ──
   check('M-08', 'thread 只能 left/right，且左脚踏必须是 left（反牙）', () => {
     const p = [];
     for (const f of fasteners) {
@@ -570,7 +498,6 @@ export function runChecks(manifest, nodeNames = new Map()) {
       + `顺时针是松 —— 装反了当场啃坏曲柄螺纹`;
   });
 
-  // ── M-09 交叉拧紧的组必须偶数且 ≥4 ──
   check('M-09', `同 group 且 order 为 cross 的紧固件是偶数颗且不少于 ${CROSS_MIN} 颗`, () => {
     raise(crossGroupProblems(fasteners));
     const groups = groupBy(fasteners, (f) => f?.group);
@@ -580,7 +507,6 @@ export function runChecks(manifest, nodeNames = new Map()) {
       : `${groups.size} 个分组，没有 order 为 cross 的组`;
   });
 
-  // ── M-10 退让距离与吸附阈值 ──
   check('M-10', '每个 install 满足 0 < snap < gap（吸附阈值小于退让距离）', () => {
     const p = [];
     for (const it of parts) {
@@ -595,7 +521,6 @@ export function runChecks(manifest, nodeNames = new Map()) {
     return `${parts.length} 个件的预备位都在吸附范围之外`;
   });
 
-  // ── M-11 规格串与螺距对账 ──
   check('M-11', '写了 spec 的紧固件，其螺距与 spec 解析结果一致', () => {
     const p = [];
     let n = 0;
@@ -615,7 +540,6 @@ export function runChecks(manifest, nodeNames = new Map()) {
   return results;
 }
 
-/** 与 sunmou/src/core/verify.js 同一套格式化 */
 export function formatReport(res) {
   const pass = res.filter((r) => r.ok).length;
   const lines = res.map((r) =>

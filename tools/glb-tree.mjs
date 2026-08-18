@@ -1,4 +1,4 @@
-/** 装配树概览：折叠掉叶子 Shape_*，按组汇总面数与包围盒 */
+/** 装配树概览：折叠掉叶子 Shape_*，按组汇总面数与件数 */
 import { readFileSync } from 'node:fs';
 
 const buf = readFileSync(process.argv[2]);

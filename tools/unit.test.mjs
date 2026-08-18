@@ -1,12 +1,9 @@
 /**
- * 单元断言 —— 用 Node 自带的 node:test，不引任何依赖。
+ * check-manifest.mjs 纯函数的单测，用 node:test，不引任何依赖。
+ * npm run verify 验清单对不对得上模型；这里验底下纯函数的行为边界：
+ * 拓扑排序的空图 / 自环 / 双向环、单位向量的容差边界、规格串拒猜、GLB 畸形输入。
  *
  *   npm test        # 或 node --test tools/unit.test.mjs
- *
- * `npm run verify` 验的是**这份清单**对不对得上模型；这里验的是它底下那几个
- * 纯函数的**行为边界**：拓扑排序碰上空图 / 自环 / 双向环各算什么、单位向量
- * 判定在 1±1e-4 这种「差一点」的地方站在哪边、规格串认不出时会不会瞎猜、
- * GLB 容器解析在畸形输入下抛不抛。三类都是对账时默默依赖、出错却很隐蔽的地方。
  */
 
 import test from 'node:test';
@@ -148,7 +145,7 @@ test('左脚踏识别：认 id 里成词的 left/li/l，不误伤 right 与别�
   assert.equal(isRightPedalId('pedal-left'), false);
 });
 
-// ── 扭矩三档 ────────────────────────────────────────────
+// ── 旋合长度与交叉分组 ──────────────────────────────────
 test('threadProblems：旋合长度 turns × pitch 要在常识范围内', () => {
   assert.deepEqual(threadProblems([{ id: 'a', turns: 6, pitch: 1.5 }]), []);   // 9 mm
   assert.deepEqual(threadProblems([]), []);
