@@ -1,19 +1,15 @@
 /**
- * 全局状态。
- *
- * 分两类，界线很清楚：
- *   偏好 PREFS —— 深色、声音、字幕这些「这台设备上我习惯怎么用」，跨会话留着；
- *   进度 RUN   —— 装到哪一步、哪几颗拧到位了，**每次打开都从头开始**。
- *
- * 装一遍车十来分钟。半截存档换来的是一次「你上次停在……」的提问，
- * 而这个问题在你刚打开页面、还没想好要不要动手的时候，是纯粹的干扰。
+ * 全局状态，分两类：
+ *   偏好 PREFS —— 深色、声音这些设备上的使用习惯，跨会话保留；
+ *   进度 RUN   —— 装到哪一步、哪几颗拧到位，**每次打开都从头开始**。
+ * 装一遍车十来分钟，不值得为半截存档加一次「上次停在……」的开场提问。
  */
 
 const KEY = 'bike.v1.state';
 
-/** 跨会话保留 */
+/** 跨会话保留。theme 留空表示还没手动选过 —— 首次跟随系统偏好 */
 const PREFS = {
-  theme: 'light',
+  theme: '',
   sound: true,
   primed: false,          // 是否看过「怎么操作」
 };
@@ -26,14 +22,7 @@ const RUN = {
   crossOrderOk: null,     // 面盖是否按对角顺序拧的
 };
 
-/**
- * 取一份全新的进度。
- *
- * **必须现拷一层。** `{ ...RUN }` 只复制引用，于是 `state.installed` 一开始
- * 就是 `RUN.installed` 本人；哪一处顺手写了 `state.installed[id] = true`
- * （原来 slide 到位时正是这么写的），这份模板就被就地改脏了，
- * 之后每一次「从头再来」都从脏模板复制 —— 装过的件永远清不掉。
- */
+/** 取一份全新的进度。嵌套对象要逐层拷：浅拷贝会让模板被就地改脏，「从头再来」清不干净 */
 const freshRun = () => Object.fromEntries(
   Object.entries(RUN).map(([k, v]) => [k, v && typeof v === 'object' ? { ...v } : v]),
 );
@@ -50,7 +39,11 @@ function load() {
       }
     }
   } catch { /* 隐私模式：用默认值 */ }
-  if (s.theme !== 'dark') s.theme = 'light';
+  // 没选过就跟随系统。加载期封面靠媒体查询取色，就绪后两边必须一致，
+  // 否则系统深色的用户会看着封面从深翻成浅
+  if (s.theme !== 'dark' && s.theme !== 'light') {
+    s.theme = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  }
   return s;
 }
 
@@ -58,8 +51,8 @@ const listeners = new Set();
 const PREF_KEYS = new Set(Object.keys(PREFS));
 
 /**
- * 只有偏好落盘。进度本来就「下次打开一律不再读取」，写它没有任何用处。
- * 顺带解决一个实际问题：拧螺丝时进度每帧都在变，不合并的话每帧写一次盘。
+ * 只有偏好落盘：进度下次打开不再读取，写它没有用处。
+ * 写盘合并到微任务里 —— 拧螺丝时进度每帧都变，不合并就每帧写一次盘。
  */
 let queued = false;
 export const state = new Proxy(load(), {
