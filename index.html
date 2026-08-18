@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-<title>从零组装一辆山地自行车 · 3D 分步说明书</title>
-<meta name="description" content="一辆全避震山地车，从一根车架装到能骑走。二十七个大件，每一件都亲眼看着装上去。" />
+<title>从零装一台山地车 · 三维分步说明书</title>
+<meta name="description" content="一台全避震山地车，从一根车架装到能骑走。二十七个大件、七颗螺丝，每一件亲手装上去。" />
 <meta name="color-scheme" content="light dark" />
 <!-- 地址栏配色。值由界面层按当前主题的 --paper 令牌写入，见 ui/hud.js 的 #paintTheme -->
 <meta name="theme-color" content="#e9ecf1" />
@@ -14,16 +14,23 @@
   <canvas id="stage" aria-label="三维装配画面"></canvas>
 
   <!--
-    封面。读模型的那几秒它是一块不透明的挡板；车一到就化成一层高斯模糊，
-    那台车隔着毛玻璃透出来 —— 封面图是它本身，不是一张贴上去的图。
-    字只留三样：这是什么、从哪儿开始、不会用怎么办。
+    封面。读模型时是一块不透明挡板；车一到，宽屏让出右侧、窄屏让出上方，
+    整台车清晰入画 —— 封面图就是舞台上那台真车。
+    进度条与按钮共用一个槽位，就绪时原地交接，版式不跳。
   -->
   <div id="cover">
     <div class="cover-in">
-      <h1 class="cover-t">从零组装<br />一辆山地自行车</h1>
-      <div class="cover-bar"><i id="cover-bar"></i></div>
-      <p id="cover-msg" class="cover-msg">正在把车搬进来</p>
-      <div id="cover-act" hidden></div>
+      <p class="cover-k">三维分步说明书</p>
+      <h1 class="cover-t">从零装一台车</h1>
+      <p class="cover-s">一台全避震山地车，从一根车架到能骑走。</p>
+      <div class="cover-slot">
+        <div id="cover-load">
+          <div class="cover-bar"><i id="cover-bar"></i></div>
+          <p id="cover-msg" class="cover-msg">正在把车搬进来</p>
+        </div>
+        <div id="cover-act" hidden></div>
+      </div>
+      <p class="cover-meta">八章 · 二十九步 · 十来分钟</p>
     </div>
   </div>
 

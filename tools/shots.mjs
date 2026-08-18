@@ -1,11 +1,8 @@
 /**
- * README 与文档里的截图，从**构建产物**里实拍。
+ * README 与文档的截图，从构建产物实拍：起 dist/、走到那一步、等镜头到位再截。
+ * 每一张都能用这条命令原样复现，界面改动后重跑一次即与文档对齐。
  *
  *   npm run build && node tools/shots.mjs
- *
- * 不是效果图，也不是开发服务器上顺手截的一张 —— 起 dist/、走到那一步、
- * 等镜头到位再按快门。README 上每一张图都能用这条命令原样复现，
- * 界面改了之后重跑一次就对得上，不会出现「文档里还是三版之前的样子」。
  */
 
 import { chromium } from 'playwright';
@@ -20,8 +17,7 @@ const OUT = join(ROOT, 'docs', 'shots');
 
 const DESK = { width: 1440, height: 900 };
 const PHONE = { width: 390, height: 844 };
-// README 顶上那一张：宽幅、不带界面，只有车。16:10 的整幅截图当页首太高，
-// 一屏读不完就失去了「一眼看见」的意思
+// README 页首那张：宽幅、不带界面。16:10 整幅当页首太高，一屏读不完
 const HERO = { width: 1600, height: 780 };
 
 /** 等镜头走到位 */
@@ -32,8 +28,8 @@ const settled = (page) => page.waitForFunction(() => {
 
 /**
  * 打开页面，读完模型，停在封面。
- * 1.5 倍像素密度：GitHub 上 README 的图按 880 px 宽显示，2160 px 的原图已经绰绰有余，
- * 而 2 倍出来的一张封面就有近两兆 —— 截图是要进版本库的。
+ * 1.5 倍像素密度：README 的图按 880 px 宽显示，2160 px 原图足够；
+ * 2 倍单张近两兆，而截图要进版本库。
  */
 async function open(browser, viewport, port, theme = 'light') {
   const page = await browser.newPage({ viewport, deviceScaleFactor: 1.5 });
@@ -72,14 +68,10 @@ async function at(page, id, { finish = true } = {}) {
 }
 
 /**
- * 藏掉全部界面，把整幅画面还给车，再留一圈余白。
- *
- * 顶栏与底栏走应用自带的 `data-quiet` —— 它同时把这两条排除出安全区，
- * 于是 stage 会重新取景、用满整幅。改 dataset 不触发 ResizeObserver，补发一次 resize。
- * 标注圆点每帧都由 `updateSpots` 重写 `style.display`，藏不住，得整个摘掉。
- *
- * 取景是按「看得清」定的，贴边贴得紧。门面那张要的是橱窗，所以把距离再推远一档：
- * `dist` 是取景距离的下限，给足了它就盖过 fit 算出来的那个数。
+ * 藏掉全部界面，把画面还给车，再留一圈余白。顶栏底栏走 `data-quiet`（同时把
+ * 两条排除出安全区，stage 重新取景用满整幅）；改 dataset 不触发 ResizeObserver，
+ * 要补发一次 resize。标注圆点每帧被 `updateSpots` 重写 `style.display`，藏不住，
+ * 只能整个摘掉。`dist` 是取景距离的下限，乘上 pad 后盖过 fit 算出的值，画面推远一档。
  */
 async function bare(page, pad = 1.18) {
   await page.evaluate((k) => {
@@ -110,13 +102,9 @@ const browser = await chromium.launch();
 try {
   /*
    * ── 01 门面：装完的整车，宽幅，不带界面 ──
-   *
-   * 早先这里截的是封面 —— 读模型那几秒的挡板，车在毛玻璃后面糊成一团。
-   * 那是「还没开始」的样子，放在 README 第一屏等于先给人看一张失焦的图。
-   *
-   * 摊开态试过，宽幅里不成立：那二十七件的位移是按 16:10 算的，
-   * 铺到 20:9 上就散了 —— 中间挤成一团，右边孤零零飘着一件。
-   * 整车是一个整体，横过来只是四周余白更宽，正好是橱窗要的样子。
+   * 不用封面：那是读模型时的挡板，车在毛玻璃后面糊成一团。
+   * 不用摊开态：位移按 16:10 算，铺到 20:9 会中间挤成一团、右边孤零零一件；
+   * 整车横过来只是余白更宽，正合橱窗的用途。
    */
   let page = await open(browser, HERO, port);
   await enter(page);
@@ -132,11 +120,9 @@ try {
   await shot(page, '02-exploded');
 
   /*
-   * ── 03 四颗面盖螺丝：一对对角已经拧上，第三颗正拧到一半 ──
-   *
-   * 不能靠「跑起来再等几秒」撞这一帧 —— 自动拧一颗只要一秒出头，
-   * 而截图本身就要一百毫秒。所以头两颗照常自动拧完，
-   * 第三颗直接转到旋合行程的六成、停在那儿：拍出来的是算准的，不是撞上的。
+   * ── 03 四颗面盖螺丝：一对对角已拧上，第三颗拧到一半 ──
+   * 不能靠等时机撞这一帧：自动拧一颗只要一秒出头，截图本身就要一百毫秒。
+   * 头两颗自动拧完，第三颗直接转到旋合行程的六成停住。
    */
   await at(page, 'D2', { finish: false });
   await page.evaluate(async () => {

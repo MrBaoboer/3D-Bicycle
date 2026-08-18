@@ -1,9 +1,6 @@
 /*
  * 画布与封面。
- *
- * 设计令牌一概不在这里定义 —— 早先这份文件自带一套 --ink / --paper / --accent，
- * 与 ui/styles/tokens.css 同名不同值，靠 import 顺序决定谁赢，
- * 改了主题色发现只有一半地方跟着变。令牌只有 tokens.css 那一处。
+ * 设计令牌只在 ui/styles/tokens.css 定义，这里一律引用语义名。
  */
 
 #stage {
@@ -19,67 +16,99 @@
 /* ══════════════ 封面 ══════════════ */
 
 /*
- * 读模型的那几秒，它是一块不透明的挡板：得有人告诉你在等什么、还剩多少。
- * 车一到，挡板化成一层**高斯模糊** —— 那台车隔着毛玻璃透出来，
- * 既是封面图，又不跟标题抢。不用另拍一张海报，页面上本来就有真东西。
- *
- * 字水平居中，只留三样：这是什么、从哪儿开始、不会用怎么办。
- * 「二十七个大件」「走一遍十来分钟」这类交代工作量的话一概不要 ——
- * 还没决定要不要开始的人，不关心它有多少步。
+ * 读模型时是一块不透明挡板；车一到，宽屏让出右侧、窄屏让出上方，
+ * 整台车清晰入画，车就是封面图。就绪那一刻做一次对焦：
+ * 模糊从 26px 拉回 0。动画不留 fill —— 结束后 backdrop-filter 整个卸掉，
+ * 不再逐帧吃合成。
  */
 #cover {
   position: fixed;
   inset: 0;
   z-index: 90;
   display: grid;
-  place-items: center;
+  align-items: center;
   padding: var(--pad-top) var(--pad-right) var(--pad-bottom) var(--pad-left);
   background: var(--bg);
-  transition: opacity 0.9s var(--ease), background 0.9s var(--ease),
-              -webkit-backdrop-filter 0.9s var(--ease), backdrop-filter 0.9s var(--ease);
+  transition: opacity 0.9s var(--ease), background 0.9s var(--ease);
 }
 #cover.gone { opacity: 0; pointer-events: none; }
 
 /*
- * 车到了：底色退成一层薄纱，真正压住背景的是模糊本身。
- * 模糊半径给到 40 px —— 再小车形还认得出来，会跟标题抢；
- * 再大就成了一块纯色，白挂一台车在后面。
+ * 挡板退成一道左侧渐隐：文字底下留实，车那半边全透。
+ * 渐变停靠点按画幅比例给 —— 文字块最宽到 34% 左右，64% 之后是车的地盘。
  */
 #cover[data-ready="1"] {
-  background: color-mix(in srgb, var(--bg) 62%, transparent);
-  -webkit-backdrop-filter: blur(40px) saturate(1.15);
-  backdrop-filter: blur(40px) saturate(1.15);
+  background: linear-gradient(100deg,
+    var(--bg) 24%,
+    color-mix(in srgb, var(--bg) 55%, transparent) 46%,
+    transparent 64%);
+  animation: cover-focus 1.15s var(--ease);
+}
+@keyframes cover-focus {
+  from { -webkit-backdrop-filter: blur(26px); backdrop-filter: blur(26px); }
+  to   { -webkit-backdrop-filter: blur(0px);  backdrop-filter: blur(0px); }
 }
 
 .cover-in {
-  width: min(34rem, 100%);
-  text-align: center;
+  width: min(30rem, 100%);
+  justify-self: start;
+  margin-left: clamp(0px, 4vw, 72px);
+  text-align: left;
+}
+
+/* 眉题：一枚橙色短划 + 一行拉开字距的小字 */
+.cover-k {
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+  margin: 0 0 var(--s5);
+  font-size: var(--fs-mark);
+  letter-spacing: var(--ls-vast);
+  color: var(--text-3);
+}
+.cover-k::before {
+  content: '';
+  width: 26px;
+  height: 2px;
+  border-radius: var(--r-full);
+  background: var(--accent);
 }
 
 /*
- * 标题。这一屏只有它一行字是大的，所以字重不必再加 ——
- * 500 配上这个字号已经够稳，600 在中文里会糊成一团黑。
+ * 标题。这一屏唯一的大字，500 够稳 —— 600 在中文里糊成一团黑。
+ * 字距比正文松一档就好，大字号再松会断开词组。
  */
 .cover-t {
   margin: 0;
   font-family: var(--display);
-  font-size: clamp(30px, 5.2vw, 52px);
+  font-size: clamp(38px, 5.4vw, 64px);
   font-weight: 500;
-  /* 中文标题的字距要比正文松一档，但不能松到断开词组；0.08em 是这一档的上限 */
-  letter-spacing: 0.08em;
-  /* 字距是加在每个字右侧的，行末会多出一格 —— 抵掉，标题才是真的居中 */
-  text-indent: 0.08em;
-  line-height: 1.34;
+  letter-spacing: 0.05em;
+  line-height: 1.2;
   color: var(--text);
-  /* 大字号下开启视觉字重优化与更细的抗锯齿，边缘不发糊 */
-  -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
 }
 
+.cover-s {
+  margin: var(--s4) 0 0;
+  font-size: var(--fs-mid);
+  letter-spacing: var(--ls-base);
+  line-height: var(--lh-body);
+  color: var(--text-2);
+}
+
+/* 进度条与按钮共用的槽位：就绪时原地交接，版式不跳 */
+.cover-slot {
+  display: grid;
+  align-items: center;
+  justify-items: start;
+  min-height: 96px;
+  margin-top: var(--s5);
+}
+
 .cover-bar {
-  width: min(11rem, 60%);
+  width: min(13rem, 72%);
   height: 2px;
-  margin: var(--s7) auto 0;
   border-radius: var(--r-full);
   background: var(--line-2);
   overflow: hidden;
@@ -102,58 +131,58 @@
 }
 .cover-msg.bad { color: var(--stop); }
 
-/* 就绪之后这一块换成「开始装车」＋「怎么操作」 */
 #cover-act {
   display: flex;
-  flex-direction: column;
+  flex-wrap: wrap;
   align-items: center;
-  gap: var(--s4);
-  margin-top: var(--s7);
-  animation: fade var(--t-slow) var(--ease) both;
+  gap: var(--s3) var(--s5);
+  animation: cover-act-in 0.55s var(--ease) 0.15s both;
+}
+@keyframes cover-act-in {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: none; }
 }
 
-/*
- * 主按钮。封面上只有它一件可按的东西，所以做得比界面里那些沉一点：
- * 大一圈、字距拉开、外面套一圈极淡的光晕 —— 不是描边，是「它自己在发光」。
- * 悬停时光晕扩一档、按钮微微抬起；按下去沉回去。
- */
+/* 主按钮：整页唯一的橙色，干净的实色胶囊，悬停抬起 */
 #cv-go.btn {
-  min-height: 52px;
-  padding: 0 2.6em;
+  min-height: 54px;
+  padding: 0 2.3em;
   font-size: var(--fs-mid);
-  letter-spacing: 0.14em;
-  box-shadow: 0 0 0 6px var(--accent-faint), var(--lift-2);
-  transition: transform var(--t-base) var(--ease),
-              background var(--t-base) var(--ease),
-              box-shadow var(--t-base) var(--ease);
+  letter-spacing: 0.12em;
+  text-indent: 0.12em;
+  box-shadow: var(--lift-2);
 }
 @media (hover: hover) {
   #cv-go.btn:hover:not(:disabled) {
-    transform: translateY(-1px);
-    box-shadow: 0 0 0 10px var(--accent-faint), var(--lift-3);
+    transform: translateY(-2px);
+    box-shadow: var(--lift-3);
   }
 }
 #cv-go.btn:active:not(:disabled) { transform: translateY(0) scale(0.98); }
 
-/* 「怎么操作」是第二选择，做成一句可点的小字，不跟主按钮争 */
+/* 「怎么操作」是第二选择：一句带下划线的小字，不与主按钮争 */
 #cv-help.btn {
-  min-height: auto;
-  padding: 2px 0;
+  min-height: var(--tap);
+  padding: 0 2px;
   font-size: var(--fs-tiny);
   letter-spacing: var(--ls-base);
   color: var(--text-3);
-  border-radius: 0;
-  box-shadow: inset 0 -1px 0 var(--line);
+  border-radius: var(--r-xs);
+  box-shadow: none;
+  text-decoration: underline;
+  text-underline-offset: 5px;
+  text-decoration-color: var(--line);
 }
 @media (hover: hover) {
   #cv-help.btn:hover:not(:disabled) {
     color: var(--text);
     background: none;
-    box-shadow: inset 0 -1px 0 var(--text-3);
+    box-shadow: none;
+    text-decoration-color: var(--text-3);
   }
 }
 
-/* 加载失败时这里会多出一段说明，读起来要像正文而不是按钮的附注 */
+/* 加载失败时的那段说明，读起来要像正文而不是按钮的附注 */
 #cover-act .cover-why {
   flex: 1 0 100%;
   max-width: 30em;
@@ -163,64 +192,54 @@
   color: var(--text-3);
 }
 
-.cover-foot {
-  margin-top: var(--s6);
+.cover-meta {
+  margin: var(--s6) 0 0;
   font-size: var(--fs-mark);
-  letter-spacing: var(--ls-base);
+  letter-spacing: var(--ls-wide);
   color: var(--text-4);
 }
 
 /*
- * 窄屏摞起来：车在上、字在下。左右分栏在 390 px 上会把两边都压成一条。
- * 字这一块自己带底，上缘渐隐过渡到车。
+ * 窄屏摞起来：车在上、字在下。
+ * 底衬钉在字块自己身上，上缘往上化开一段 —— 字块多高，界线就跟到哪儿，
+ * 不按画幅百分比定停靠点（那样车的下半截会被糊掉一层）。
  */
 @media (max-width: 860px) {
-  #cover {
-    align-items: end;
-    justify-items: stretch;
-    padding-bottom: var(--pad-bottom);
-  }
-  /*
-   * 底不能按画幅百分比给：字块有多高随文案与字号变，按 34%–52% 那样定停靠点，
-   * 车的下半截会被渐隐糊掉一层，看着像没渲染完。把渐隐钉在字块自己身上，
-   * 上缘往上化开一段，下面一路铺实 —— 字块多高，界线就跟到哪儿。
-   */
+  #cover { align-items: end; }
+  .cover-in { width: 100%; margin-left: 0; position: relative; }
   #cover[data-ready="1"] { background: none; }
-  .cover-in { width: 100%; position: relative; }
-  #cover[data-ready="1"] .cover-in { margin-inline: auto; }
   #cover[data-ready="1"] .cover-in::before {
     content: '';
     position: absolute;
     left: -100vw; right: -100vw;
-    top: -72px; bottom: -100vh;
+    top: -96px; bottom: -100vh;
     z-index: -1;
-    background: linear-gradient(to bottom, transparent 0, var(--bg) 72px);
+    background: linear-gradient(to bottom, transparent 0, var(--bg) 96px);
     pointer-events: none;
   }
-  .cover-t { font-size: clamp(26px, 8vw, 36px); }
-  .cover-facts { margin: var(--s4) 0; }
-  .cover-foot { margin-top: var(--s5); }
+  .cover-t { font-size: clamp(34px, 9.4vw, 44px); }
+  .cover-k { margin-bottom: var(--s4); }
+  .cover-slot { min-height: 88px; margin-top: var(--s4); }
+  .cover-meta { margin-top: var(--s4); }
 }
 
 /*
- * 手机横过来：竖向只剩三百多，摞起来的话字吃掉三分之二，车被压成顶上一条还要裁头。
- * 横向倒是有八百多 —— 换回左右分栏，并把字这一栏收窄，砍掉次要的几行。
+ * 手机横过来：竖向只剩三百多，摞起来的话车被压成顶上一条。
+ * 横向有八百多 —— 回到左右分栏，字这一栏收窄。
  */
 @media (max-height: 540px) and (orientation: landscape) {
-  #cover { align-items: center; justify-items: start; }
+  #cover { align-items: center; }
+  .cover-in { width: min(21rem, 55%); margin-left: 0; }
   #cover[data-ready="1"] {
     background: linear-gradient(to right,
-      var(--bg) 0%, var(--bg) 26%,
-      color-mix(in srgb, var(--bg) 82%, transparent) 42%,
-      transparent 58%);
+      var(--bg) 28%,
+      color-mix(in srgb, var(--bg) 60%, transparent) 46%,
+      transparent 62%);
   }
-  .cover-in { width: min(22rem, 60%); }
-  #cover[data-ready="1"] .cover-in { margin-inline: 0; }
-  /* 上一档那块钉在字块上的遮罩要收掉 —— 它是横铺的，留着会把整台车盖没 */
   #cover[data-ready="1"] .cover-in::before { display: none; }
-  .cover-eyebrow { margin-bottom: var(--s2); }
-  .cover-t { margin-bottom: var(--s2); font-size: clamp(22px, 4vw, 30px); }
+  .cover-k { margin-bottom: var(--s3); }
+  .cover-t { font-size: clamp(26px, 4.4vw, 34px); }
   .cover-s { font-size: var(--fs-tiny); }
-  .cover-facts { margin: var(--s3) 0; padding-top: var(--s3); }
-  .cover-foot { display: none; }
+  .cover-slot { min-height: 68px; margin-top: var(--s3); }
+  .cover-meta { display: none; }
 }

@@ -25,7 +25,7 @@
 建模 Robert Schweier，实时化与动画 Felix Herbst / prefrontal cortex，
 详见 [assets/CREDITS.md](assets/CREDITS.md)。
 
-这一层要紧的三件事：
+这一层的三个要点：
 
 - **它不是 NC。** CC BY-SA 4.0 允许商业使用，条件是署名 + 相同方式共享。
 - **我没法把它授权给你。** 我不是版权人，只是按 CC BY-SA 4.0 的条款在用。
