@@ -38,7 +38,6 @@ function read(ai) {
   return new T(bin.buffer, bin.byteOffset + base, a.count * n);
 }
 
-// 收集全部 primitive
 const prims = [];
 for (const m of g.meshes) for (const p of m.primitives) prims.push(p);
 

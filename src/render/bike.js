@@ -1,11 +1,7 @@
 /**
- * 整车：加载 GLB，把 757 个节点按名字索引起来，供上层按零件名取用。
- *
- * 这个模型是一台真车的数字孪生，零件名是德文真实型号
- * （Vorbau_Hope_FR_35mm = Hope FR 35mm 把立，Pedal_Funn_Bigfoot_le = 左脚踏）。
- * 上层一律只认名字，不认节点下标 —— 换一份模型或换一档压缩变体，
- * 下标会漂，名字不会。
- *
+ * 整车：加载 GLB，把节点按名字索引，供上层按零件名取用。
+ * 零件名是德文真实型号（Vorbau_Hope_FR_35mm = Hope FR 35mm 把立）。
+ * 上层只认名字不认下标 —— 换模型或换压缩变体时下标会漂，名字不会。
  * 素材许可见 assets/CREDITS.md（CC BY-SA 4.0）。
  */
 
@@ -16,20 +12,13 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 // 必须走 BASE_URL 拼路径，不能用 import.meta.url（那会让 rolldown 试图把 12MB 打进产物）
 const MODEL_URL = `${import.meta.env.BASE_URL}models/CarbonFrameBike.glb`;
 
-/**
- * 这三片是给 iOS AR QuickLook 垫的假阴影贴片，在网页里是三块糊在车底的黑面。
- * 上游资产自带，加载后立刻摘掉。
- */
+/** iOS AR QuickLook 的假阴影贴片，网页里是糊在车底的黑面 —— 加载后摘掉 */
 const DROP = ['Shadows'];
 
 /**
- * 上游模型的静止姿态里，整个前端绕转向轴向左打了 40.212°。
- * 那是给渲染出图摆的姿势，装配说明书要把它扶正 —— 否则前轮不在中垂面上，
- * 前轴也不是横向（实测 [-0.585, 0.274, -0.764]），装前轮那一步的方向会整个歪掉。
- *
- * 转向轴取把立节点的局部 +Z（离铅垂 25.01°，即头管角 65°）。
- * 扶正后两条判据同时成立：前轮心 Z 由 31.94 mm 归到 -0.7 mm；
- * 前轴由上面那个斜向量变成 [0.0004, 0.0009, -1]，正横向。
+ * 上游静止姿态里整个前端绕转向轴向左打了 40.212°，须扶正 ——
+ * 否则前轮不在中垂面上、前轴不是横向，装前轮那一步的方向整个歪掉。
+ * 转向轴取把立节点的局部 +Z（头管角 65°）。扶正判据见 docs/DEVELOPMENT.md「模型」。
  */
 const STEER = {
   node: 'Lenker',                          // 转向总成的根：Lenker → Federung → RadVorn
@@ -85,11 +74,9 @@ export class Bike {
     this.center = this.bounds.getCenter(new THREE.Vector3());
 
     /*
-     * 上游那条 Holobike_Loop 是作者做的爆炸展开动画，356 条通道。**一帧也不播。**
-     * 曾经以为可以从中反推每一件的装配方向，实测不成立（座管脱离方向几乎纯横向，
-     * 而立管轴是斜的；左右脚踏还朝同一侧飞出）—— 那是给镜头看的摊开展示。
-     * 装配方向一律取自几何轴，写在 assets/bike.manifest.json 里。
-     * 只在统计里报一下它还在，免得后来的人以为模型被换过。
+     * 上游的 Holobike_Loop 是给镜头看的爆炸展开动画：一帧也不播，
+     * 也不能用来反推装配方向（左右脚踏朝同一侧飞出）—— 方向一律取几何轴，
+     * 写在 assets/bike.manifest.json。统计里报它还在，免得误以为模型被换过。
      */
     this.scene.add(this.root);
     this.stats = { nodes: this.byName.size, meshes, animations: gltf.animations?.length || 0 };
@@ -97,10 +84,8 @@ export class Bike {
   }
 
   /**
-   * 把前端绕转向轴扶正，见 STEER 的注释。
-   * 旋转要在**父空间**里绕一个过支点的轴做：先把支点与轴变换进父空间，
-   * 平移分量绕支点转，再把旋转左乘到自身四元数上。
-   * 直接写 node.rotation 只会绕节点自己的原点转，前轮会甩出去。
+   * 把前端绕转向轴扶正（见 STEER）。旋转在父空间里绕过支点的轴做 ——
+   * 直接写 node.rotation 只绕节点自身原点转，前轮会甩出去。
    */
   #unsteer() {
     const node = this.byName.get(STEER.node);
@@ -124,13 +109,9 @@ export class Bike {
   }
 
   /**
-   * 清单里存的是**原始 GLB 节点名**（含空格，如 "Lenker 1"），
-   * 而 GLTFLoader 加载时会过一道 PropertyBinding.sanitizeNodeName：
-   * 空白转下划线、`[ ] . : /` 直接删掉。于是运行时叫 "Lenker_1"。
-   *
-   * 两边必须各自保持原样：清单存原始名，才能被 tools/check-manifest.mjs
-   * 拿 GLB 离线逐条对账；运行时查表前现做同样的净化。
-   * 图省事把清单改成净化名的话，校验器就再也发现不了「模型改名」这类走散。
+   * GLTFLoader 会过一道 PropertyBinding.sanitizeNodeName（空白转下划线，
+   * `[ ] . : /` 删掉），而清单存的是原始 GLB 节点名 —— 查表前现做同样的净化。
+   * 清单侧不能改存净化名，否则 tools/check-manifest.mjs 拿 GLB 对不上账。
    */
   static sanitize(name) {
     return String(name).replace(/\s/g, '_').replace(/[[\]./:]/g, '');
@@ -146,13 +127,9 @@ export class Bike {
   has(name) { return this.byName.has(name) || this.byName.has(Bike.sanitize(name)); }
 
   /**
-   * 某个子树的世界包围盒 —— 取景与吸附判定都要用。
-   *
-   * **先自己刷一遍矩阵。** `Box3.setFromObject()` 内部走的是
-   * `updateWorldMatrix(false, false)`：既不回头刷祖先，也不往下刷子树，
-   * 只把自己那一格算新。而取景是在首帧渲染之前算的，那时谁也没刷过矩阵 ——
-   * 量一个刚被 `slide.park()` 挪过位的**组节点**，子网格拿到的还是父节点的旧矩阵，
-   * 量出来的就是它挪之前在哪儿。
+   * 某个子树的世界包围盒。量之前先刷祖先与整棵子树的矩阵 ——
+   * `Box3.setFromObject()` 只刷自己那一格，而取景跑在首帧渲染之前，矩阵一旧，
+   * 量出来的是挪位之前的盒。见 docs/DEVELOPMENT.md「量几何之前先自己刷矩阵」。
    */
   boundsOf(name) {
     const o = this.get(name);
@@ -161,13 +138,9 @@ export class Bike {
   }
 
   /**
-   * 待装件的呼吸高亮。走 emissive 而不是换材质：
-   * 换材质会丢掉这台车最值钱的东西 —— 碳纹、阳极氧化的各向异性、胎侧字。
-   *
-   * **必须先把材质复制一份给这几块网格。** 上游的材质是全车共用的：
-   * 主车架、两条摇臂、前叉用的是同一份碳纤维材质，直接改它的 emissive，
-   * 「点亮左摇臂」会把整台车一起烧成橙色，看着像整车都在待装。
-   * 复制的是同型号同参数的材质，GL program 仍然复用，不会引起重编译。
+   * 待装件的高亮。走 emissive 不换材质 —— 换材质会丢掉碳纹与阳极氧化质感。
+   * 改之前先把材质复制给目标网格：上游材质全车共用，直接改 emissive
+   * 会把整台车一起点亮。复制同参数材质不引起 GL program 重编译。
    */
   highlight(names, color = 0xd8642a, strength = 0.16) {
     const list = Array.isArray(names) ? names : [names];

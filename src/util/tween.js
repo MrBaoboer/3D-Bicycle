@@ -1,7 +1,6 @@
 /** 极简补间与缓动 —— 全片动画的统一时基 */
 
-/** 只留在用的这几条。没有生产者的缓动一律不留 —— 留着的下场是有人照着挑一条，
- *  而它从来没在这套画面上试过 */
+/** 只留有调用方的缓动。没在这套画面上用过的曲线不留，免得被当成试过的选项挑走 */
 export const Ease = {
   linear: (t) => t,
   outQuad: (t) => 1 - (1 - t) * (1 - t),
@@ -17,11 +16,8 @@ export const Ease = {
 };
 
 /**
- * 用户要求「减少动效」。
- *
- * CSS 那一侧已由 base.css 的 @media 关掉了；这一条给 JS 驱动的动效用 ——
- * 方向箭头的呼吸、镜头缓动这类**持续不停**的运动，CSS 管不到。
- * 每次读实时值，用户在系统里改了设置不必刷新页面。
+ * prefers-reduced-motion。CSS 侧由 base.css 的 @media 关掉；这一条给 JS 驱动的
+ * 持续动效用（方向箭头的呼吸、镜头缓动）。每次读实时值，系统设置改了不必刷新。
  */
 export const reducedMotion = () =>
   typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -76,9 +72,8 @@ export function tween(dur, onUpdate, opts = {}) {
 const waits = new Set();
 
 /**
- * 等一会儿。
- * 被 cancelAll 取消时**不会**兑现 —— 于是 `await wait(...)` 之后的那些代码
- * 就此打住。翻页时这一条很要紧：上一步排在后面的动作不该落到下一步的画面上。
+ * 等一会儿。被 cancelAll 取消时**不会**兑现 —— `await wait(...)` 之后的代码
+ * 就此打住，翻页时上一步排在后面的动作才不会落到下一步的画面上。
  */
 export const wait = (s) => new Promise((resolve) => {
   const rec = { id: 0 };

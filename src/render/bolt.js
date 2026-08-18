@@ -16,11 +16,8 @@
 import * as THREE from 'three';
 
 /*
- * 三种材质全模块共用，module 级常量。
- *
- * 原先每颗螺丝各建一份：MeshStandardMaterial 的 GL program 于是被反复编译与删除，
- * 而面盖那一步一次要摆四颗 —— 卡顿正好落在「该开始拧了」的那一刻。
- * 几何仍然每次重建（它便宜），材质留着，所以 dispose 只释放几何。
+ * 材质全模块共用：每颗螺丝各建一份会让 GL program 被反复编译与删除，
+ * 卡顿正落在「该开始拧了」那一刻。几何仍每次重建（便宜），dispose 只释放几何。
  */
 const MATS = {
   steel: new THREE.MeshStandardMaterial({ color: 0xb9bfc4, roughness: 0.32, metalness: 0.92 }),
