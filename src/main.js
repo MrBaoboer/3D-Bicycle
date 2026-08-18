@@ -1,12 +1,12 @@
 /*
- * 从零装一台山地车 · 3D 分步交互说明书
+ * 从零装一台山地车 · 三维分步说明书
  * Copyright © 2026 MrBaoboer
  *
  * 代码 AGPL-3.0（见 LICENSE）；课程与文案 CC BY-NC-SA 4.0；
- * 整车模型是第三方素材，CC BY-SA 4.0，另行署名，见 assets/CREDITS.md。三层的界线见 COMMERCIAL.md。
+ * 整车模型为第三方素材，CC BY-SA 4.0，署名见 assets/CREDITS.md。三层界线见 COMMERCIAL.md。
  *
- * 这里是唯一的组装处：new 出每一层，塞进一个共享的 ctx，再把步骤表交给引擎。
- * 步骤脚本不 import 任何单例，需要什么都从 ctx 里拿 —— 换一套渲染或界面时，
+ * 这里是唯一的组装处：new 出每一层，塞进共享的 ctx，再把步骤表交给引擎。
+ * 步骤脚本不 import 单例，需要什么都从 ctx 里拿 —— 换一套渲染或界面，
  * 改的是这一个文件，不是二十九个步骤。
  */
 
@@ -38,6 +38,7 @@ import { tick as tickTweens } from './util/tween.js';
 import { acts, PHASES } from './steps/acts.js';
 
 const cover = document.getElementById('cover');
+const coverIn = cover.querySelector('.cover-in');
 const coverBar = document.getElementById('cover-bar');
 const coverMsg = document.getElementById('cover-msg');
 const coverAct = document.getElementById('cover-act');
@@ -58,15 +59,13 @@ async function main() {
   stage.setTheme(state.theme);
 
   /*
-   * WebGL 上下文可能被系统回收（移动端切后台常见）—— 不处理就是永久黑屏。
-   * preventDefault() 之后浏览器会尝试恢复，three 会把资源按需重传。
+   * WebGL 上下文可能被系统回收（移动端切后台常见），不处理就是永久黑屏。
+   * preventDefault() 之后浏览器会尝试恢复，three 按需重传资源。
+   * 挡板要退回不透明档，「开始装车」也得收起来 —— 此刻透出去的
+   * 是一块刚被回收的画布，按下去只会进一个空舞台。
    *
-   * 挡回来的那一层要退回**不透明**那一档：就绪之后封面只剩一道横向渐隐，
-   * 半边是透的，而此刻透出去的是一块刚被回收的画布。
-   * 「开始装车」也得收起来 —— 画面还没回来，按下去只会把人送进一个空舞台。
+   * 这两个变量在下面才有内容，但上下文丢失可能发生在读模型的那几秒里，先备好。
    */
-  // 这两个变量在下面才有内容，但上下文丢失可能发生在**读模型的那几秒里** ——
-  // 那时下面的代码还没跑到，所以先在这里备好，不能用 const 等到那时候再声明
   let entered = false;
   let framePoster = () => {};
   stage.canvas.addEventListener('webglcontextlost', (e) => {
@@ -86,7 +85,7 @@ async function main() {
     coverMsg.classList.remove('bad');
     coverMsg.hidden = true;
     cover.dataset.ready = '1';
-    // 还没开始过的，把封面原样交还（连同那两枚按钮）；已经在装的，让封面退场
+    // 还没开始的，把封面连同按钮原样交还；已经在装的，让封面退场
     if (entered) {
       cover.classList.add('gone');
       setTimeout(() => { cover.hidden = true; }, 1000);
@@ -96,15 +95,14 @@ async function main() {
     }
   });
 
-  // 加载期只报两件事：车还在读（占掉九成时间，进度条说得清）、正在架好。
-  // 中间再插几句「正在拆包装」「正在清点随车件」只是花字，读的人一句也来不及看
+  // 加载期只报两件事：读模型（占九成时间，进度条说得清）、正在架好
   await frame();
   const bike = new Bike(stage.scene);
   await bike.load((p) => progress(p * 0.85, '正在把车搬进来'));
 
   const hud = new HUD(state);
-  // 封面还挡着的时候界面不该在背后待命：封面一变成半透，顶栏与底部提示会透出来，
-  // 而它们说的还是「第 0 步」。等按下「开始装车」再摆出来
+  // 封面还挡着时界面不该在背后待命 —— 封面一变半透，顶栏会透出来，
+  // 而它说的还是「第 0 步」。等按下「开始装车」再摆出来
   hud.showChrome(false);
   const fx = new Fx(stage.scene, tier);
   const guides = new Arrows(stage.scene);
@@ -118,11 +116,11 @@ async function main() {
   // 「此刻车上该有哪些件」由它按步骤计划现推 —— 从零开始装靠这一层
   ctx.build = new Build(ctx);
 
-  progress(0.9, '正在架好');
+  progress(0.9, '马上就好');
   await frame();
 
   // 着色器提前编译。不编，全部 program 会挤在封面化开那一刻的第一帧里 ——
-  // 恰好是整段体验最需要顺的那一下。
+  // 恰好是整段体验最需要顺的那一下
   try {
     await stage.renderer.compileAsync(stage.scene, stage.camera);
   } catch (e) {
@@ -132,7 +130,7 @@ async function main() {
   const engine = new Engine(ctx);
   engine.setSteps(acts(ctx), PHASES);
 
-  // 界面占掉的上下两条边交给三维 —— 车据此让位与退远
+  // 界面占掉的边交给三维 —— 车据此让位与退远
   hud.onSafeArea = (safe) => stage.setSafeArea(safe);
   hud.onSound = (v) => SFX.setEnabled(v);
   hud.onTheme = (v) => stage.setTheme(v);
@@ -161,27 +159,29 @@ async function main() {
   await sleep(160);
 
   /*
-   * 封面就绪：整台车摆满画面，封面化成一层高斯模糊压在它上面。
-   *
-   * 车按整幅取景（安全区归零）—— 字是居中压在模糊层上的，两者不必互相让位。
-   * 模糊之后车形只剩一团柔和的明暗，正好当底子；而它是真的那台车，
-   * 不是一张贴上去的图。
+   * 封面就绪：整台车清晰入画，文字让到一侧。
+   * 宽屏与横屏，字在左、车居右半；窄屏竖排，字在下、车居上半。
+   * 车的落位交给安全区 —— 量出文字块实际占掉的那条边，其余留给车。
    */
   framePoster = () => {
-    stage.setSafeArea({ top: 0, bottom: 0, left: 0, right: 0 });
+    const r = coverIn.getBoundingClientRect();
+    const stacked = matchMedia('(max-width: 860px)').matches
+      && !matchMedia('(max-height: 540px) and (orientation: landscape)').matches;
+    stage.setSafeArea(stacked
+      ? { top: 0, bottom: Math.max(0, innerHeight - r.top + 12), left: 0, right: 0 }
+      : { top: 0, bottom: 0, left: Math.min(innerWidth * 0.5, r.right + 24), right: 0 });
     stage.setRecommended({ ...engine.steps[0].cam, target: new THREE.Vector3(...engine.steps[0].cam.target) });
     stage.snapToRecommended();
   };
   cover.dataset.ready = '1';
   coverMsg.hidden = true;
-  // 读完了，进度条就没有可说的了 —— 留着一条满格的橙线只会跟主按钮抢注意力
+  // 读完了，进度条就没有可说的了
   cover.querySelector('.cover-bar').hidden = true;
   coverAct.hidden = false;
   coverAct.innerHTML = `
     <button class="btn btn-primary" id="cv-go">开始装车</button>
     <button class="btn btn-text" id="cv-help">怎么操作</button>`;
-  coverAct.querySelector('#cv-go').focus();
-  // 版式已经换成让开半边的那一档了，量完再摆车
+  // 版式已经换档，量完再摆车
   await frame();
   framePoster();
   const onCoverResize = () => { if (!cover.hidden) framePoster(); };
