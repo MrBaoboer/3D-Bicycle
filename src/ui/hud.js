@@ -66,7 +66,7 @@ const shortName = (s) => String(s || '').split('·').pop().trim();
 
 /*
  * 常驻界面骨架：顶部章节与步名（只读）、两侧翻页、右侧列读数与「为什么」、
- * 底部一句旁白加需要时才出现的任务按钮，都不带底色。
+ * 底部一句旁白加需要时才出现的次要行动，都不带底色。
  * 旁白是唯一一处常驻文字 —— 该说的话由动画说，文字只点一下「现在看哪儿」。
  */
 const SHELL = `
@@ -100,7 +100,6 @@ const SHELL = `
 <footer class="foot" data-quiet="0">
   <div class="actions">
     <div class="alts"></div>
-    <button type="button" class="btn btn-primary btn-task" hidden></button>
   </div>
   <p class="cue" role="status" aria-live="polite"></p>
 </footer>
@@ -127,7 +126,7 @@ export class HUD {
       side: q('.side'),
       note: q('.note'), noteTab: q('.note-tab'), toast: q('.toast'), tag: q('.tag'), srStep: q('.sr-step'),
       readout: q('.readout'), bolts: q('.bolts'),
-      foot: q('.foot'), alts: q('.alts'), task: q('.btn-task'),
+      foot: q('.foot'), alts: q('.alts'),
       prev: q('.nav-prev'), next: q('.nav-next'),
       overlay: q('.overlay'),
       cover: document.getElementById('cover'),
@@ -156,7 +155,6 @@ export class HUD {
 
     this.el.prev.addEventListener('click', () => this.onPrev?.());
     this.el.next.addEventListener('click', () => this.onNext?.());
-    this.el.task.addEventListener('click', () => this.onTask?.());
     this.el.menu.addEventListener('click', (e) => { e.stopPropagation(); this.toggleMenu(); });
     this.el.noteTab.addEventListener('click', () => this.toggleNote());
 
@@ -475,25 +473,9 @@ export class HUD {
     this.#dropNoteRect();
   }
 
-  // ══════════════ 这一步的任务 ══════════════
+  // ══════════════ 底部行动 ══════════════
 
-  /** 底部中央那一个按钮。只有需要动手的步骤才有，翻页不靠它 */
-  setTask(label, onClick) {
-    const b = this.el.task;
-    if (!label) { b.hidden = true; this.onTask = null; return; }
-    b.innerHTML = `<span>${label}</span>`;
-    b.hidden = false;
-    b.disabled = false;
-    this.onTask = onClick;
-  }
-
-  /** 这一步还挂着一个没按的任务按钮 —— 引擎据此判断「下一步」该先替他做完 */
-  get hasTask() { return !this.el.task.hidden && !!this.onTask; }
-
-  /** 替用户按下那个任务按钮 */
-  runTask() { this.onTask?.(); }
-
-  /** 任务做完了：右边那枚箭头亮一下，告诉你可以走了 */
+  /** 这一步的活演完了：右边那枚箭头亮一下，告诉你可以走了 */
   readyNext() {
     const b = this.el.next;
     b.classList.remove('ready'); void b.offsetWidth; b.classList.add('ready');
@@ -603,7 +585,7 @@ export class HUD {
       }
       this.closeMenu();
       if (b.dataset.k === 'help') this.guide({ full: true });
-      if (b.dataset.k === 'restart') this.onRestart?.();
+      if (b.dataset.k === 'restart') this.#confirmRestart();
     });
 
     // 点到菜单以外才收起。判定要排除菜单自身：pointerdown 摘掉菜单后，
@@ -623,6 +605,24 @@ export class HUD {
     if (this._away) { removeEventListener('pointerdown', this._away, true); this._away = null; }
     // 焦点若还在菜单里，关掉后送回菜单按钮 —— 否则直接掉到 body
     if (hadFocus) this.el.menu.focus();
+  }
+
+  /**
+   * 从头再来要过一道确认：装一遍十来分钟，菜单里一次误点不该把它清干净。
+   * 工具与脚本仍直接调 onRestart —— 确认只拦人手。
+   */
+  #confirmRestart() {
+    const done = () => this.hideOverlay();
+    this.sheet({
+      top: true,
+      title: '从头再来？',
+      lede: '这一遍的进度会清掉，从第一步重新开始。',
+      actions: [
+        { label: '接着装', on: done },
+        { label: '从头再来', kind: 'primary', on: () => { done(); this.onRestart?.(); } },
+      ],
+      onEsc: done,
+    });
   }
 
   setTheme(mode) {
@@ -724,7 +724,7 @@ export class HUD {
     }
     const nb = this._noteRect;
     /*
-     * 标注层级压过底部界面（否则它指的东西被糊掉），代价是也压过任务按钮 ——
+     * 标注层级压过底部界面（否则它指的东西被糊掉），代价是也压过底部那排行动 ——
      * 投影落进界面占掉的边里时要藏起来，不然会替按钮把点击吃掉。
      * 藏了不卡步骤：翻页从来不被拦。
      */

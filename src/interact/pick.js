@@ -22,7 +22,6 @@ export class Pick {
     this.ptr = new THREE.Vector2();
     this.session = null;
     this._queued = false;
-    this._last = null;
     this._bind();
   }
 
@@ -83,7 +82,6 @@ export class Pick {
     if (!this.session) return;
     this.session.onHover?.(null, 0, 0);
     this.session = null;
-    this._last = null;
   }
 
   #onMove(e) {
@@ -110,8 +108,6 @@ export class Pick {
 
   /** 名字没变就只挪位置，不重写文本 —— 每帧改 textContent 会让读屏一直播报 */
   #report(hit, x, y) {
-    if (!this.session) return;
-    this._last = hit?.id ?? null;
-    this.session.onHover?.(hit ?? null, x, y);
+    this.session?.onHover?.(hit ?? null, x, y);
   }
 }

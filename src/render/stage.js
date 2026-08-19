@@ -122,6 +122,10 @@ export class Stage {
     controls.enablePan = false;
     controls.rotateSpeed = 0.8;
     controls.zoomSpeed = 0.9;
+    // 缩放夹在「钻进零件里」与「远得只剩一个点」之间。上限要给足：
+    // 取景现算，竖屏上摊开那一步要退到约 13 m —— 夹得比它近，那一步永远落不到位
+    controls.minDistance = 0.15;
+    controls.maxDistance = 30;
     this.controls = controls;
 
     /** 界面遮住的四条边（像素）—— 取景按剩下那块画面算 */

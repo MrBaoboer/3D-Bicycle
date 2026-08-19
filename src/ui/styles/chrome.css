@@ -3,7 +3,7 @@
  * **没有底部条。** 画面是这份说明书要说的全部，一条横贯屏幕的实底会把它
  * 切掉一截；界面退到四周，中间整片留给车。
  *   顶栏：进度轨 + 第几步 + 步名 + 设置，只读。两侧：翻页，垂直居中贴边。
- *   右列：说明卡贴上、读数贴下。底部：一句旁白 + 需要动手时那一个按钮。
+ *   右列：说明卡贴上、读数贴下。底部：一句旁白 + 需要时才出现的次要行动。
  * 常驻件的边距一律走 --pad-*（= --edge + 安全区），不用裸的 --edge。
  */
 
@@ -295,10 +295,10 @@
 .bolt[data-state="threading"] .bolt-dot { box-shadow: inset 0 0 0 2px var(--accent); }
 .bolt[data-state="tight"] .bolt-dot { background: var(--go); box-shadow: none; }
 
-/* ══════════════ 底部旁白与动手按钮 ══════════════ */
+/* ══════════════ 底部旁白与次要行动 ══════════════ */
 
 /*
- * 一列浮在画面上的东西：需要动手时那一个按钮，和一句旁白。不带整幅底色。
+ * 一列浮在画面上的东西：一句旁白，和「帮我装上」这类需要时才出现的次要行动。
  * 整块不吃指针事件，只有子元素自己吃 —— 旁边的空当仍然可以按住转画面。
  */
 .foot {
@@ -343,6 +343,21 @@
 .actions:empty { display: none; }
 .alts { display: flex; align-items: center; gap: var(--s1); }
 .alts:empty { display: none; }
+
+/*
+ * 「帮我装上」这类次要行动直接浮在三维上，垫一层与旁白同款的玻璃底 ——
+ * 无底的灰字落在前叉、轮胎这些深色件上就读不出来了。
+ */
+.alts .btn-text {
+  color: var(--text-2);
+  background: var(--bar);
+  -webkit-backdrop-filter: blur(16px) saturate(1.4);
+  backdrop-filter: blur(16px) saturate(1.4);
+  box-shadow: var(--hair);
+}
+@media (hover: hover) {
+  .alts .btn-text:hover:not(:disabled) { color: var(--accent); background: var(--bar); }
+}
 
 /* ══════════════ 两侧翻页 ══════════════ */
 
