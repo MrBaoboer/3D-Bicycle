@@ -334,8 +334,9 @@
           0,
           1
         ],
-        "gap": 0.1,
-        "snap": 0.004
+        "gap": 0.14,
+        "snap": 0.004,
+        "note": "dir 与 gap 抄 crank-right：直装牙盘是先在台面上锁进右曲柄、连成一件穿进五通的，两件同一步、同方向、等退距，飞行中相对位置才不变"
       },
       "fasten": [],
       "needs": []
@@ -396,12 +397,14 @@
           0
         ],
         "gap": 0.2,
-        "snap": 0.006
+        "snap": 0.006,
+        "note": "needs 里的卡钳不是几何必需，是出厂顺序：卡钳先在座上，整轮落位时碟片才有「穿进来令片中间」这一课 —— 网购整车到手就是这个状态"
       },
       "fasten": [],
       "needs": [
         "swingarm-left",
-        "swingarm-right"
+        "swingarm-right",
+        "caliper-rear"
       ]
     },
     {
@@ -418,13 +421,15 @@
           0
         ],
         "gap": 0.19,
-        "snap": 0.006
+        "snap": 0.006,
+        "note": "needs 里有卡钳，理由同 rear-wheel"
       },
       "fasten": [
         "axle-front"
       ],
       "needs": [
-        "fork"
+        "fork",
+        "caliper-front"
       ]
     },
     {
@@ -489,8 +494,7 @@
       },
       "fasten": [],
       "needs": [
-        "fork",
-        "front-wheel"
+        "fork"
       ]
     },
     {
@@ -511,8 +515,7 @@
       },
       "fasten": [],
       "needs": [
-        "swingarm-left",
-        "rear-wheel"
+        "swingarm-left"
       ]
     },
     {

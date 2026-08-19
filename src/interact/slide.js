@@ -81,8 +81,11 @@ export class Slide {
    *   轮子落进勾爪比座管滑进立管沉，两者共用一份配方、只差增益，见 audio/sfx.js 的别名表
    * @param {number} [o.glow] 待装件的自发光强度，默认 0.1（进了吸附范围三倍）。
    *   细长的深色件要调高：两根黑油管贴在黑碳纤维车架上，0.1 那一档等于没亮
+   * @param {Object<string,string>} [o.follow] 从动件 → 驱动件。两件在台面上已连成一体
+   *   （直装牙盘锁在右曲柄上），从动件不单独拖：抓哪件都驱动整组、同一个 u 走完全程、
+   *   一起记账。前提是两件在清单里同 dir 同 gap，飞行中相对位置才不变。
    */
-  begin({ partId, onSeat, onAll, wrongHint, sound, glow = 0.1 } = {}) {
+  begin({ partId, onSeat, onAll, wrongHint, sound, glow = 0.1, follow = null } = {}) {
     this.cancel();
     const ids = Array.isArray(partId) ? [...partId] : [partId];
     const items = new Map();
@@ -95,8 +98,10 @@ export class Slide {
       items.set(id, rig);
       for (const n of rig.nodes) owner.set(n.obj, id);
     }
+    const followers = new Map(Object.entries(follow ?? {}));
     this.session = {
-      items, owner, pending: new Set(ids), total: ids.length, seated: 0,
+      items, owner, followers, pending: new Set(ids.filter((id) => !followers.has(id))),
+      total: ids.length, seated: 0,
       fails: 0, offered: false, onSeat, onAll, wrongHint, sound: sound || 'SEAT_IN', glow,
     };
     for (const rig of items.values()) this.#setU(rig, 0);
@@ -117,6 +122,7 @@ export class Slide {
     this.active = null;
     if (s) {
       for (const id of s.pending) this.#setU(s.items.get(id), 1);
+      for (const [f] of s.followers ?? []) this.#setU(s.items.get(f), 1);
       this.ctx.guides?.clear();
     }
     // 翻页可能正落在一次拖拽中间：手指还按着就交还轨道控制，剩下半程会变成转镜头。留给 onUp
@@ -225,6 +231,20 @@ export class Slide {
     for (const n of rig.nodes) n.obj.position.copy(n.home).addScaledVector(n.step, travel);
   }
 
+  /** 这一件的从动件（连成一体、跟着它动的那几件） */
+  #followersOf(id) {
+    const s = this.session;
+    const out = [];
+    for (const [f, drv] of s?.followers ?? []) if (drv === id) out.push(s.items.get(f));
+    return out;
+  }
+
+  /** 交互路径一律走这里：驱动一件 = 连它的从动件一起写同一个 u */
+  #drive(rig, u) {
+    this.#setU(rig, u);
+    for (const f of this.#followersOf(rig.id)) this.#setU(f, u);
+  }
+
   /**
    * 每件待装的件上钉一枚箭头，指着它该去的方向。
    * 三维拖拽不是不学就会的事，没有这一枚，画面上只是一台缺零件的车。
@@ -259,10 +279,12 @@ export class Slide {
     this.ctx.bike.clearHighlights?.();
     const base = s.glow;
     for (const id of s.pending) {
-      for (const n of s.items.get(id).nodes) {
-        // 自发光只加到「认得出是同一个零件」为止。再高一档，深色主题下
-        // 碳纹与阳极氧化会被烧成一片橙，看着像换了个零件而不是同一个被点亮
-        this.ctx.bike.highlight?.(n.obj.name, ACCENT, Math.min(1, id === near ? base * 3 : base));
+      for (const rig of [s.items.get(id), ...this.#followersOf(id)]) {
+        for (const n of rig.nodes) {
+          // 自发光只加到「认得出是同一个零件」为止。再高一档，深色主题下
+          // 碳纹与阳极氧化会被烧成一片橙，看着像换了个零件而不是同一个被点亮
+          this.ctx.bike.highlight?.(n.obj.name, ACCENT, Math.min(1, id === near ? base * 3 : base));
+        }
       }
     }
   }
@@ -275,7 +297,10 @@ export class Slide {
     this.ray.setFromCamera(this.ptr, this.ctx.stage.camera);
 
     const objs = [];
-    for (const id of s.pending) for (const n of s.items.get(id).nodes) objs.push(n.obj);
+    for (const [id, rig] of s.items) {
+      if (!s.pending.has(s.followers?.get(id) ?? id)) continue;
+      for (const n of rig.nodes) objs.push(n.obj);
+    }
     const hits = this.ray.intersectObjects(objs, true);
     if (!hits.length) return null;
     // 命中的是子网格，往上走到清单登记的那个节点
@@ -289,7 +314,8 @@ export class Slide {
     if (!s || this.active || this.ctx.hud?.modalOpen) return;
     const hit = this.#pick(e);
     if (!hit) return;
-    const rig = s.items.get(hit.id);
+    // 抓到从动件（比如牙盘）时，驱动的仍是它连着的那一件
+    const rig = s.items.get(s.followers?.get(hit.id) ?? hit.id);
 
     const cam = this.ctx.stage.camera.getWorldDirection(new THREE.Vector3());
     // 运动轴几乎正对相机：这个角度推与不推屏幕上一个样。
@@ -351,7 +377,7 @@ export class Slide {
     }
 
     const u = Math.max(K.BACK, Math.min(1, a.u0 + along / rig.gap));
-    this.#setU(rig, u);
+    this.#drive(rig, u);
 
     const near = (1 - u) * rig.gap <= rig.snap;
     if (near !== a.near) {
@@ -381,7 +407,7 @@ export class Slide {
 
     // 每一帧都认一次 session：中途翻页把件放回了原位，滑回去那几帧不能再把它拖下来
     const u0 = rig.u;
-    await tween(0.42, (k) => { if (this.session === s) this.#setU(rig, u0 * (1 - k)); },
+    await tween(0.42, (k) => { if (this.session === s) this.#drive(rig, u0 * (1 - k)); },
       { ease: Ease.inOutQuad });
     if (this.session !== s) return;
     this.ctx.hud?.toast('再往前推一点');
@@ -396,7 +422,7 @@ export class Slide {
     const rig = a.rig;
     const u0 = rig.u;
     this.ctx.sfx?.play('WRONG');
-    await tween(0.3, (k) => { if (this.session === s) this.#setU(rig, u0 * (1 - Ease.outQuad(k))); },
+    await tween(0.3, (k) => { if (this.session === s) this.#drive(rig, u0 * (1 - Ease.outQuad(k))); },
       { ease: Ease.linear });
     if (this.session !== s) return;
     this.ctx.hud?.toast(s.wrongHint || `${rig.name}顺着箭头推进去`);
@@ -428,21 +454,23 @@ export class Slide {
     const from = rig.u;
     const dur = 0.18 + 0.42 * (1 - from);
     this.ctx.sfx?.play(s.sound, { slide: dur * 0.9 });
-    await tween(dur, (k) => { if (this.session === s) this.#setU(rig, from + (1 - from) * k); },
+    await tween(dur, (k) => { if (this.session === s) this.#drive(rig, from + (1 - from) * k); },
       { ease: Ease.outCubic });
     if (this.session !== s) return;
     await tween(0.1, (k) => {
-      if (this.session === s) this.#setU(rig, 1 - Math.sin(k * Math.PI) * (BOUNCE / rig.gap));
+      if (this.session === s) this.#drive(rig, 1 - Math.sin(k * Math.PI) * (BOUNCE / rig.gap));
     }, { ease: Ease.linear });
     if (this.session !== s) return;
-    this.#setU(rig, 1);
+    this.#drive(rig, 1);
 
     s.pending.delete(partId);
     s.seated += 1;
     s.fails = 0;
-    // 结尾自检按这张表点名，装没装上不看画面看它。
+    // 结尾自检按这张表点名，装没装上不看画面看它。从动件跟着一起记账。
     // 整个换掉而不是就地改：状态是 Proxy，就地改不触发落盘与监听
-    this.ctx.state.installed = { ...this.ctx.state.installed, [partId]: true };
+    const booked = { ...this.ctx.state.installed, [partId]: true };
+    for (const f of this.#followersOf(partId)) booked[f.id] = true;
+    this.ctx.state.installed = booked;
     s.onSeat?.(partId, s.seated, s.total);
 
     if (s.pending.size) {

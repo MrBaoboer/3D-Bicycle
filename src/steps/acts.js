@@ -1,10 +1,12 @@
 /**
- * 八章二十九步：整车从零组装。第二步画面上只剩主车架，
- * 后三角、前端、操控、传动、轮组、刹车逐件长上去，
- * 顺序由清单的 needs 约束，`npm run verify` 的拓扑排序作证。
+ * 八章二十九步：整车从零组装。开箱之后画面上只剩主车架，
+ * 后三角、前端、操控、刹车、轮组、传动逐件长上去。
+ * 卡钳在轮组前面，是出厂的顺序：整轮落位时碟片要穿进来令片中间，
+ * 这一课顺序倒了就没了；链条压轴，它要等牙盘、后拨、后轮都在。
+ * 每一步的前置件由清单的 needs 声明，冒烟按步序逐件对账。
  *
  * 文案只有三处：步名（顶栏）、一行旁白（底部）、少数「为什么」卡片。
- * 卡片只出现在物理原因看不见的地方：反牙、对角、最小插入线。
+ * 卡片只出现在原因看不见的地方：反牙、对角、预紧、直装接口、最小插入线。
  * 步骤的形状与四个取景入口见 docs/DEVELOPMENT.md；取景一律现算，不写常量。
  */
 
@@ -15,7 +17,7 @@ import {
 import { tween, Ease } from '../util/tween.js';
 
 /** 顶部章节名，按 phase 取。这是唯一一份 —— 界面层不自带 */
-export const PHASES = ['开箱', '后三角', '前端', '操控', '传动', '轮组', '刹车', '上路'];
+export const PHASES = ['开箱', '后三角', '前端', '操控', '刹车', '轮组', '传动', '上路'];
 
 /*
  * 拆开那一步的总时长与错峰占比：二十七件分八层剥，层间要留得出看清一层的间隔。
@@ -27,7 +29,7 @@ const BURST_STAGGER = 0.6;
 const clamp01 = (x) => Math.max(0, Math.min(1, x));
 
 /** 推入一件的标准步骤：取景现算、亮起、拖到位 */
-const push = (ctx, { id, phase, title, cue, parts, hint, note, dir, cam, pad, off, sound, glow, near }) => ({
+const push = (ctx, { id, phase, title, cue, parts, hint, note, dir, cam, pad, off, sound, glow, near, follow }) => ({
   id,
   phase,
   title,
@@ -36,7 +38,7 @@ const push = (ctx, { id, phase, title, cue, parts, hint, note, dir, cam, pad, of
   cue,
   note,
   enter(c, engine) {
-    installPart(c, parts, { hint, sound, glow, onDone: () => engine.done() });
+    installPart(c, parts, { hint, sound, glow, follow, onDone: () => engine.done() });
   },
   exit(c) { c.slide.cancel(); for (const p of parts) c.slide.park(p, 1); },
 });
@@ -71,6 +73,11 @@ export function acts(ctx) {
        */
       cam: at(frameWhole(ctx, { ...BURST_VIEW })),
       cue: '拖动画面转一圈，点标号认四处要点',
+      note: {
+        title: '网购到手是什么样',
+        body: '整车发到家，通常已经装好九成，开箱要自己动手的多半就四处：车把、前轮、座管、脚踏。'
+          + '这一遍从零装起 —— 那四处都会亲手过，其余的看明白它是怎么上去的，往后自己调车心里有数。',
+      },
       enter(c) {
         const marks = [
           ['fork', '前叉', '连着头碗与前轮'],
@@ -202,6 +209,13 @@ export function acts(ctx) {
       parts: ['stem'],
       cue: '把立从上方套住舵管',
       hint: '顺着舵管压下去',
+      note: {
+        title: '先预紧，再夹紧',
+        body: '把立套正只是开始。真正的顺序是：顶盖螺丝先把整摞轴承的间隙压掉（预紧），'
+          + '侧面的夹紧螺丝才轮到拧。反过来，车头永远有一丝旷 —— '
+          + '捏死前刹前后推车，能觉出「咯噔」一下。'
+          + '<em>这两处螺丝模型里没有，这一步演到套正为止。</em>',
+      },
     }),
 
     // ══════════════ 操控 ══════════════
@@ -281,33 +295,33 @@ export function acts(ctx) {
       pad: 1.1,
     }),
 
-    // ══════════════ 传动 ══════════════
+    // ══════════════ 刹车 ══════════════
+    // 卡钳先于轮组，是出厂的顺序：这样整轮落位时碟片才有「穿进来令片中间」
+    // 这一课 —— 网购整车开箱，见到的正是这个状态
     P({
       id: 'E1',
       phase: 4,
-      title: '牙盘',
-      parts: ['chainring'],
-      cue: '牙盘贴上曲柄的直装座',
+      title: '前刹卡钳',
+      parts: ['caliper-front'],
+      cue: '卡钳贴上叉腿的座，来令片的缝留给碟片',
     }),
     P({
       id: 'E2',
       phase: 4,
-      title: '左右曲柄',
-      parts: ['crank-left', 'crank-right'],
-      cue: '两条曲柄从两侧穿进五通',
-      hint: '顺着五通轴推进去',
-      pad: 1.1,
-      note: {
-        title: '曲柄相位差 180°',
-        body: '两条曲柄必须正好反向。同向的话，一圈里有一段完全踩不上力。',
-      },
+      title: '后刹卡钳',
+      parts: ['caliper-rear'],
+      cue: '后卡钳贴上摇臂的座',
     }),
     P({
       id: 'E3',
       phase: 4,
-      title: '后拨',
-      parts: ['derailleur'],
-      cue: '后拨挂上尾勾',
+      title: '接上油管',
+      parts: ['hoses'],
+      cue: '两根油管从刹把一路走到卡钳',
+      pad: 1.05,
+      // 油管是两根细黑管贴在黑车架上，取景又是整个前端 —— 常规 0.1 的自发光
+      // 在这个画幅上等于没亮。亮成两条橙线，「走到哪儿」才看得见
+      glow: 0.45,
     }),
 
     // ══════════════ 轮组 ══════════════
@@ -320,9 +334,10 @@ export function acts(ctx) {
       hint: '顺着摇臂往上抬',
       sound: 'WHEEL_SEAT',
       note: {
-        title: '飞轮朝传动侧',
-        body: '整轮是成品，飞轮与刹车碟已经在花鼓上。放进去之前先看一眼：'
-          + '飞轮那一侧朝右，碟片那一侧朝左。',
+        title: '飞轮朝右，碟片穿进卡钳',
+        body: '整轮是成品，飞轮与刹车碟都已在花鼓上：飞轮那侧朝右，碟片那侧朝左。'
+          + '落位时碟片要从卡钳两片来令片的中间穿过去 —— 对不准就硬压，会把来令片顶歪。'
+          + '<em>后桶轴模型里没有，这一步演到落进勾爪为止。</em>',
       },
     }),
     P({
@@ -330,13 +345,9 @@ export function acts(ctx) {
       phase: 5,
       title: '前轮进前叉',
       parts: ['front-wheel'],
-      cue: '前轮抬进前叉的勾爪',
+      cue: '前轮抬进前叉的勾爪，碟片照样穿进卡钳',
       hint: '顺着叉腿往上抬，不是横着推',
       sound: 'WHEEL_SEAT',
-      note: {
-        title: '碟片要对准卡钳',
-        body: '刹车碟得从卡钳的两片来令片之间穿过去。对不准就硬推，会把来令片顶歪。',
-      },
     }),
     {
       id: 'F3',
@@ -359,31 +370,42 @@ export function acts(ctx) {
       exit(c) { c.screw.cancel(); },
     },
 
-    // ══════════════ 刹车 ══════════════
+    // ══════════════ 传动 ══════════════
     P({
       id: 'G1',
       phase: 6,
-      title: '前刹卡钳',
-      parts: ['caliper-front'],
-      cue: '卡钳骑上碟片，贴住叉腿的座',
+      title: '右曲柄带着牙盘',
+      parts: ['chainring', 'crank-right'],
+      // 两件已在台面上连成一体：抓哪件都一起动，一次坐实
+      follow: { chainring: 'crank-right' },
+      cue: '牙盘先锁上右曲柄，连成一件穿进五通',
+      hint: '顺着五通轴推进去',
+      note: {
+        title: '为什么牙盘要先上',
+        spec: [['规格', 'SRAM 直装 26 齿']],
+        body: '这只牙盘不走螺栓盘爪，直接锁在右曲柄背面 —— 上了车，接口就被曲柄挡死。'
+          + '所以顺序没得选：<em>台面上先把牙盘锁上曲柄，再连成一件穿进五通。</em>',
+      },
     }),
     P({
       id: 'G2',
       phase: 6,
-      title: '后刹卡钳',
-      parts: ['caliper-rear'],
-      cue: '后卡钳同样骑上碟片',
+      title: '左曲柄',
+      parts: ['crank-left'],
+      cue: '左曲柄从另一侧套上轴，与右边正好反向',
+      hint: '顺着五通轴推进去',
+      note: {
+        title: '曲柄相位差 180°',
+        body: '两条曲柄必须正好反向 —— 同向的话，一圈里有一段完全踩不上力。'
+          + '先右后左也没得选：轴长在右曲柄上，左臂是套上轴尾锁住的。',
+      },
     }),
     P({
       id: 'G3',
       phase: 6,
-      title: '接上油管',
-      parts: ['hoses'],
-      cue: '两根油管从刹把一路走到卡钳',
-      pad: 1.05,
-      // 油管是两根细黑管贴在黑车架上，取景又是整个前端 —— 常规 0.1 的自发光
-      // 在这个画幅上等于没亮。亮成两条橙线，「走到哪儿」才看得见
-      glow: 0.45,
+      title: '后拨',
+      parts: ['derailleur'],
+      cue: '后拨挂上尾勾',
     }),
     P({
       id: 'G4',
