@@ -19,6 +19,13 @@
   -webkit-backdrop-filter: blur(20px);
   backdrop-filter: blur(20px);
 }
+/* 封面上开卷（「怎么操作」）：底下是大字标题而不是三维场景，九成透明加重模糊
+   会把它们洗成一片灰影贴在卡片四周。封面还在场时幕布拉成整面纸色，干干净净 */
+body:has(#cover:not([hidden]):not(.gone)) .overlay.veil {
+  background: var(--paper);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
 /* 坞用的那一档：不铺底，手还在画面上 */
 .overlay.bare { background: none; pointer-events: none; }
 .overlay.bare .sheet,

@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "从零装一台山地车 · 三维分步说明书",
+  "description": "山地车组装指南 · 3D 分步交互说明书",
   "scripts": {
     "dev": "vite",
     "build": "vite build",

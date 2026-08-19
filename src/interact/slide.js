@@ -30,6 +30,13 @@ const BOUNCE = 0.0015;
 /** 运动轴与视线的夹角余弦超过这个数就别接管：拖拽平面近乎平行于视线，落点会满屏乱跳 */
 const TOO_ALIGNED = 0.97;
 
+/**
+ * 拾取容差（px）。几何射线只认真实网格：油管这类细件在整幅画面上
+ * 只占约 0.01%，指哪儿都落空 —— 未命中时退到「离指针最近的采样点」。
+ * 粗指针（触屏）给指腹的一半，细指针给一枚光标的富余。
+ */
+const PICK_PX = { fine: 16, coarse: 32 };
+
 /** 与界面主色同一个橙（styles.css 的 --accent）—— 高亮和按钮说的是同一件事 */
 const ACCENT = 0xd8642a;
 
@@ -81,8 +88,11 @@ export class Slide {
    *   轮子落进勾爪比座管滑进立管沉，两者共用一份配方、只差增益，见 audio/sfx.js 的别名表
    * @param {number} [o.glow] 待装件的自发光强度，默认 0.1（进了吸附范围三倍）。
    *   细长的深色件要调高：两根黑油管贴在黑碳纤维车架上，0.1 那一档等于没亮
+   * @param {Object<string,string>} [o.follow] 从动件 → 驱动件。两件在台面上已连成一体
+   *   （直装牙盘锁在右曲柄上），从动件不单独拖：抓哪件都驱动整组、同一个 u 走完全程、
+   *   一起记账。前提是两件在清单里同 dir 同 gap，飞行中相对位置才不变。
    */
-  begin({ partId, onSeat, onAll, wrongHint, sound, glow = 0.1 } = {}) {
+  begin({ partId, onSeat, onAll, wrongHint, sound, glow = 0.1, follow = null } = {}) {
     this.cancel();
     const ids = Array.isArray(partId) ? [...partId] : [partId];
     const items = new Map();
@@ -95,8 +105,10 @@ export class Slide {
       items.set(id, rig);
       for (const n of rig.nodes) owner.set(n.obj, id);
     }
+    const followers = new Map(Object.entries(follow ?? {}));
     this.session = {
-      items, owner, pending: new Set(ids), total: ids.length, seated: 0,
+      items, owner, followers, pending: new Set(ids.filter((id) => !followers.has(id))),
+      total: ids.length, seated: 0,
       fails: 0, offered: false, onSeat, onAll, wrongHint, sound: sound || 'SEAT_IN', glow,
     };
     for (const rig of items.values()) this.#setU(rig, 0);
@@ -117,6 +129,7 @@ export class Slide {
     this.active = null;
     if (s) {
       for (const id of s.pending) this.#setU(s.items.get(id), 1);
+      for (const [f] of s.followers ?? []) this.#setU(s.items.get(f), 1);
       this.ctx.guides?.clear();
     }
     // 翻页可能正落在一次拖拽中间：手指还按着就交还轨道控制，剩下半程会变成转镜头。留给 onUp
@@ -165,7 +178,7 @@ export class Slide {
         step = obj.parent.worldToLocal(d.clone()).sub(o);
         basis.setFromMatrix4(new THREE.Matrix4().copy(obj.parent.matrixWorld).invert());
       }
-      return { obj, home: this.#home(obj), step, basis };
+      return { obj, home: this.#home(obj), step, basis, center: null };
     });
 
     const rig = { id, name: part.name, dir: d, gap, snap, nodes, center: null, half: 0, u: 1 };
@@ -174,7 +187,11 @@ export class Slide {
     // 会把方向箭头再往外推一个 gap，指到车外面去
     this.#setU(rig, 1);
     const box = new THREE.Box3();
-    for (const n of nodes) box.union(new THREE.Box3().setFromObject(n.obj));
+    for (const n of nodes) {
+      const b = new THREE.Box3().setFromObject(n.obj);
+      n.center = b.isEmpty() ? n.obj.getWorldPosition(new THREE.Vector3()) : b.getCenter(new THREE.Vector3());
+      box.union(b);
+    }
     rig.center = box.isEmpty()
       ? nodes[0].obj.getWorldPosition(new THREE.Vector3())
       : box.getCenter(new THREE.Vector3());
@@ -225,6 +242,20 @@ export class Slide {
     for (const n of rig.nodes) n.obj.position.copy(n.home).addScaledVector(n.step, travel);
   }
 
+  /** 这一件的从动件（连成一体、跟着它动的那几件） */
+  #followersOf(id) {
+    const s = this.session;
+    const out = [];
+    for (const [f, drv] of s?.followers ?? []) if (drv === id) out.push(s.items.get(f));
+    return out;
+  }
+
+  /** 交互路径一律走这里：驱动一件 = 连它的从动件一起写同一个 u */
+  #drive(rig, u) {
+    this.#setU(rig, u);
+    for (const f of this.#followersOf(rig.id)) this.#setU(f, u);
+  }
+
   /**
    * 每件待装的件上钉一枚箭头，指着它该去的方向。
    * 三维拖拽不是不学就会的事，没有这一枚，画面上只是一台缺零件的车。
@@ -233,8 +264,26 @@ export class Slide {
   #guide() {
     const s = this.session;
     if (!s) return;
-    this.ctx.guides?.set([...s.pending].map((id) => {
+    const marks = [];
+    for (const id of s.pending) {
       const rig = s.items.get(id);
+      // 箭头按行程长短定大小。写死 5 cm 的话，它在 0.7 m 的前轮上只有轮径的 7%，
+      // 混在辐条与碟片里根本看不出是个箭头 —— 而它是「往哪儿使劲」的唯一答案
+      const len = Math.max(0.07, rig.gap * 0.7);
+      /*
+       * 一件的几个节点按距离聚簇，每簇一枚箭头 —— 油管前后两束隔着半台车，
+       * 共用形心的话箭头落在两束之间的空处，指着一片什么都没有的地方。
+       * 避震那种四个节点叠在一处的整体件，聚出来仍是一枚。
+       */
+      const clusters = [];
+      for (const n of rig.nodes) {
+        const hit = clusters.find((c) => c.center.distanceTo(n.center) < len * 1.6);
+        if (hit) {
+          hit.center.lerp(n.center, 1 / ++hit.n);
+        } else {
+          clusters.push({ center: n.center.clone(), n: 1 });
+        }
+      }
       /*
        * 尾巴落在件的**前沿**，不是件的形心 —— 压在形心上时箭头有一半埋在件里，
        * 读起来像画在件身上的一道橙条纹，而不是「往这边去」。
@@ -242,14 +291,11 @@ export class Slide {
        * 越过去就成了指着车里面。
        */
       const off = Math.min(0, rig.half - rig.gap);
-      return {
-        pos: rig.center.clone().addScaledVector(rig.dir, off),
-        dir: rig.dir.clone(),
-        // 箭头按行程长短定大小。写死 5 cm 的话，它在 0.7 m 的前轮上只有轮径的 7%，
-        // 混在辐条与碟片里根本看不出是个箭头 —— 而它是「往哪儿使劲」的唯一答案
-        len: Math.max(0.07, rig.gap * 0.7),
-      };
-    }));
+      for (const c of clusters) {
+        marks.push({ pos: c.center.addScaledVector(rig.dir, off), dir: rig.dir.clone(), len });
+      }
+    }
+    this.ctx.guides?.set(marks);
   }
 
   /** 待装的件亮一层；进了吸附范围再亮一档 —— 那是「松手就上去了」的唯一提示 */
@@ -259,12 +305,32 @@ export class Slide {
     this.ctx.bike.clearHighlights?.();
     const base = s.glow;
     for (const id of s.pending) {
-      for (const n of s.items.get(id).nodes) {
-        // 自发光只加到「认得出是同一个零件」为止。再高一档，深色主题下
-        // 碳纹与阳极氧化会被烧成一片橙，看着像换了个零件而不是同一个被点亮
-        this.ctx.bike.highlight?.(n.obj.name, ACCENT, Math.min(1, id === near ? base * 3 : base));
+      for (const rig of [s.items.get(id), ...this.#followersOf(id)]) {
+        for (const n of rig.nodes) {
+          // 自发光只加到「认得出是同一个零件」为止。再高一档，深色主题下
+          // 碳纹与阳极氧化会被烧成一片橙，看着像换了个零件而不是同一个被点亮
+          this.ctx.bike.highlight?.(n.obj.name, ACCENT, Math.min(1, id === near ? base * 3 : base));
+        }
       }
     }
+  }
+
+  /** 每个网格缓存一份步进采样的顶点（局部空间）—— 屏幕距离拾取用它，不逐顶点全量投 */
+  #samples(root) {
+    const out = [];
+    root.traverse((m) => {
+      const pos = m.geometry?.attributes?.position;
+      if (!m.isMesh || !pos) return;
+      let pts = m.userData._pickPts;
+      if (!pts) {
+        const stride = Math.max(1, Math.floor(pos.count / 96));
+        const arr = [];
+        for (let i = 0; i < pos.count; i += stride) arr.push(pos.getX(i), pos.getY(i), pos.getZ(i));
+        pts = m.userData._pickPts = new Float32Array(arr);
+      }
+      out.push({ m, pts });
+    });
+    return out;
   }
 
   #pick(e) {
@@ -275,13 +341,47 @@ export class Slide {
     this.ray.setFromCamera(this.ptr, this.ctx.stage.camera);
 
     const objs = [];
-    for (const id of s.pending) for (const n of s.items.get(id).nodes) objs.push(n.obj);
+    for (const [id, rig] of s.items) {
+      if (!s.pending.has(s.followers?.get(id) ?? id)) continue;
+      for (const n of rig.nodes) objs.push(n.obj);
+    }
     const hits = this.ray.intersectObjects(objs, true);
-    if (!hits.length) return null;
-    // 命中的是子网格，往上走到清单登记的那个节点
-    let o = hits[0].object;
-    while (o && !s.owner.has(o)) o = o.parent;
-    return o ? { id: s.owner.get(o), point: hits[0].point.clone() } : null;
+    if (hits.length) {
+      // 命中的是子网格，往上走到清单登记的那个节点
+      let o = hits[0].object;
+      while (o && !s.owner.has(o)) o = o.parent;
+      if (o) return { id: s.owner.get(o), point: hits[0].point.clone() };
+    }
+
+    /*
+     * 射线落空：按屏幕距离再找一遍。把每件待装件的采样点投到屏幕上，
+     * 距指针最近且在容差内的当命中 —— 抓的意图很清楚（这一步能抓的只有待装件），
+     * 差那十几像素不该由手稳不稳来买单。
+     */
+    const lim = matchMedia('(pointer: coarse)').matches ? PICK_PX.coarse : PICK_PX.fine;
+    const px = e.clientX - rect.left;
+    const py = e.clientY - rect.top;
+    const world = new THREE.Vector3();
+    const v = new THREE.Vector3();
+    let best = null;
+    for (const [id, rig] of s.items) {
+      if (!s.pending.has(s.followers?.get(id) ?? id)) continue;
+      for (const n of rig.nodes) {
+        for (const { m, pts } of this.#samples(n.obj)) {
+          m.updateWorldMatrix(true, false);
+          for (let i = 0; i < pts.length; i += 3) {
+            world.set(pts[i], pts[i + 1], pts[i + 2]).applyMatrix4(m.matrixWorld);
+            v.copy(world).project(this.ctx.stage.camera);
+            if (v.z > 1) continue;                    // 相机身后
+            const dx = (v.x * 0.5 + 0.5) * rect.width - px;
+            const dy = (0.5 - v.y * 0.5) * rect.height - py;
+            const d2 = dx * dx + dy * dy;
+            if (!best || d2 < best.d2) best = { d2, id, point: world.clone() };
+          }
+        }
+      }
+    }
+    return best && best.d2 <= lim * lim ? { id: best.id, point: best.point } : null;
   }
 
   onDown(e) {
@@ -289,16 +389,16 @@ export class Slide {
     if (!s || this.active || this.ctx.hud?.modalOpen) return;
     const hit = this.#pick(e);
     if (!hit) return;
-    const rig = s.items.get(hit.id);
+    // 抓到从动件（比如牙盘）时，驱动的仍是它连着的那一件
+    const rig = s.items.get(s.followers?.get(hit.id) ?? hit.id);
 
     const cam = this.ctx.stage.camera.getWorldDirection(new THREE.Vector3());
     // 运动轴几乎正对相机：这个角度推与不推屏幕上一个样。
-    // 索性不接管指针 —— 这一下顺势成了转镜头，正是他该先做的事
+    // 索性不接管指针 —— 这一下顺势成了转镜头，正是他该先做的事。
+    // 每次都要说，且计入求助计数：说一次就闭嘴的话，后面全是点了没反应的死画面
     if (Math.abs(cam.dot(rig.dir)) > TOO_ALIGNED) {
-      if (!s.turned) {
-        s.turned = true;
-        this.ctx.hud?.toast('先转一下画面，这个角度看不出推进去多少');
-      }
+      this.ctx.hud?.toast('先转一下画面，这个角度看不出推进去多少');
+      this.#fail();
       return;
     }
 
@@ -351,7 +451,7 @@ export class Slide {
     }
 
     const u = Math.max(K.BACK, Math.min(1, a.u0 + along / rig.gap));
-    this.#setU(rig, u);
+    this.#drive(rig, u);
 
     const near = (1 - u) * rig.gap <= rig.snap;
     if (near !== a.near) {
@@ -381,7 +481,7 @@ export class Slide {
 
     // 每一帧都认一次 session：中途翻页把件放回了原位，滑回去那几帧不能再把它拖下来
     const u0 = rig.u;
-    await tween(0.42, (k) => { if (this.session === s) this.#setU(rig, u0 * (1 - k)); },
+    await tween(0.42, (k) => { if (this.session === s) this.#drive(rig, u0 * (1 - k)); },
       { ease: Ease.inOutQuad });
     if (this.session !== s) return;
     this.ctx.hud?.toast('再往前推一点');
@@ -396,7 +496,7 @@ export class Slide {
     const rig = a.rig;
     const u0 = rig.u;
     this.ctx.sfx?.play('WRONG');
-    await tween(0.3, (k) => { if (this.session === s) this.#setU(rig, u0 * (1 - Ease.outQuad(k))); },
+    await tween(0.3, (k) => { if (this.session === s) this.#drive(rig, u0 * (1 - Ease.outQuad(k))); },
       { ease: Ease.linear });
     if (this.session !== s) return;
     this.ctx.hud?.toast(s.wrongHint || `${rig.name}顺着箭头推进去`);
@@ -428,21 +528,23 @@ export class Slide {
     const from = rig.u;
     const dur = 0.18 + 0.42 * (1 - from);
     this.ctx.sfx?.play(s.sound, { slide: dur * 0.9 });
-    await tween(dur, (k) => { if (this.session === s) this.#setU(rig, from + (1 - from) * k); },
+    await tween(dur, (k) => { if (this.session === s) this.#drive(rig, from + (1 - from) * k); },
       { ease: Ease.outCubic });
     if (this.session !== s) return;
     await tween(0.1, (k) => {
-      if (this.session === s) this.#setU(rig, 1 - Math.sin(k * Math.PI) * (BOUNCE / rig.gap));
+      if (this.session === s) this.#drive(rig, 1 - Math.sin(k * Math.PI) * (BOUNCE / rig.gap));
     }, { ease: Ease.linear });
     if (this.session !== s) return;
-    this.#setU(rig, 1);
+    this.#drive(rig, 1);
 
     s.pending.delete(partId);
     s.seated += 1;
     s.fails = 0;
-    // 结尾自检按这张表点名，装没装上不看画面看它。
+    // 结尾自检按这张表点名，装没装上不看画面看它。从动件跟着一起记账。
     // 整个换掉而不是就地改：状态是 Proxy，就地改不触发落盘与监听
-    this.ctx.state.installed = { ...this.ctx.state.installed, [partId]: true };
+    const booked = { ...this.ctx.state.installed, [partId]: true };
+    for (const f of this.#followersOf(partId)) booked[f.id] = true;
+    this.ctx.state.installed = booked;
     s.onSeat?.(partId, s.seated, s.total);
 
     if (s.pending.size) {

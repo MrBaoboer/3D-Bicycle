@@ -1,8 +1,8 @@
 /**
  * 分步引擎。一步 = 一份声明：机位、提示、笔记、进入与退出。
  * 引擎把上一步收干净、再铺开下一步，步骤不带清场逻辑。
- * 翻页永远不被拦住：螺丝没拧完也可以往前走；
- * 需要动手的步骤把动作放在底部那一个任务按钮上，与导航互不相干。
+ * 翻页永远不被拦住：螺丝没拧完也可以往前走 ——
+ * 「下一步」只是先替他把这一步剩下的活演一件（见 finishPending）。
  */
 
 import * as THREE from 'three';
@@ -103,10 +103,9 @@ export class Engine {
 
   /** 这一步还剩什么没做完 */
   get pending() {
-    const { slide, screw, hud } = this.ctx;
+    const { slide, screw } = this.ctx;
     if (slide.session?.pending.size) return 'slide';
     if (screw.session?.pending.size) return 'screw';
-    if (hud.hasTask) return 'task';
     return null;
   }
 
@@ -119,10 +118,9 @@ export class Engine {
     if (!kind) return false;
     this.busy = true;
     try {
-      const { slide, screw, hud } = this.ctx;
+      const { slide, screw } = this.ctx;
       if (kind === 'slide') await slide.autoSeat([...slide.session.pending][0]);
-      else if (kind === 'screw') await screw.autoRunNext();
-      else hud.runTask();
+      else await screw.autoRunNext();
     } catch (e) {
       console.error('[自动演示]', e);
     } finally {
@@ -153,7 +151,6 @@ export class Engine {
       ctx.hud.clearSpots();
       ctx.hud.setNote(null);
       ctx.hud.setAlts([]);
-      ctx.hud.setTask(null);
       ctx.hud.setCue('');
       ctx.hud.closeOverlays();
       ctx.exitInspect?.();
@@ -169,7 +166,6 @@ export class Engine {
       ctx.build?.applyAt(i, { all: !!s.showAll });
 
       ctx.hud.setStep(i, this.steps.length, s.title);
-      if (s.task) ctx.hud.setTask(s.task.label, () => s.task.onClick(ctx, this));
       if (s.cue) ctx.hud.setCue(s.cue);
       if (s.cam) {
         /*
@@ -220,9 +216,8 @@ export class Engine {
     await this.go(0);
   }
 
-  /** 任务做完了：收起任务按钮，让右边那枚箭头亮一下 */
+  /** 这一步的活做完了：收起次要行动，让右边那枚箭头亮一下 */
   done() {
-    this.ctx.hud.setTask(null);
     this.ctx.hud.setAlts([]);
     this.ctx.hud.readyNext();
   }
