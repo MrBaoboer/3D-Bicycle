@@ -18,15 +18,15 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        node: ['22.13', '24']
+        node: ['22.13', '24', '26']
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-node@v6
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: ${{ matrix.node }}
           cache: npm
       - name: 装依赖
-        # engines 声明支持两头，就得有人替这句话作证。
+        # engines 说支持 22.13 起的两条线，三格替这句话作证：下界、Active LTS、Current。
         # 跳过 Playwright 内核下载：这条作业不起浏览器。
         # 不要用 --ignore-scripts，那会连累别的包。
         run: npm ci
@@ -36,11 +36,14 @@ jobs:
 
   smoke:
     name: 冒烟
-    if: github.event_name != 'pull_request'
+    # Dependabot 那条合并 PR 是要在远端直接点合并的，不能只凭工具链绿灯放行 ——
+    # 依赖里唯一会真出事的是 three，而它的渲染回归只有冒烟看得见。
+    # 别的 PR 仍然不等这几分钟。
+    if: github.event_name != 'pull_request' || github.event.pull_request.user.login == 'dependabot[bot]'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-node@v6
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: '22.13'
           cache: npm
@@ -48,7 +51,7 @@ jobs:
       - run: npx playwright install --with-deps chromium
       - run: npm run build
       - run: npm run smoke
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: failure()
         with:
           name: 冒烟截图

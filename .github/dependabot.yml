@@ -1,0 +1,28 @@
+# 依赖跟版。所有生态收进同一条 PR —— 六个 Action 与六个 npm 包一起送上来，
+# 在远端点一次合并就完事，不用一个包一条 PR 地点。
+#
+# 为什么还是写了两条 updates：Dependabot 一个条目只能管一个生态，
+# 跨生态合并靠顶层的 multi-ecosystem-groups 把两条的产出并成同一条 PR。
+#
+# 主要是为 Action 写的：npm 有 `npm outdated` 一句话就露馅，
+# Action 版本没有任何本地命令会提醒你落后 —— 上一轮它就落后了三个大版本。
+version: 2
+
+multi-ecosystem-groups:
+  # 组名进分支名，必须是 ASCII —— 同 workflows 里作业 id 的那条教训。
+  # 周期定在组上；进了组的条目不再各自写 schedule，由这里统一发车。
+  toolchain:
+    schedule:
+      interval: monthly
+
+updates:
+  # patterns 是进组的必填项，'*' 表示这个生态的全部依赖都并进来
+  - package-ecosystem: github-actions
+    directory: /
+    multi-ecosystem-group: toolchain
+    patterns: ['*']
+
+  - package-ecosystem: npm
+    directory: /
+    multi-ecosystem-group: toolchain
+    patterns: ['*']
