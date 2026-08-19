@@ -101,6 +101,8 @@ test('真实清单：课程里几条硬顺序确实成立', () => {
   before('crank-right', 'pedal-right');  // 没有曲柄，脚踏拧不进去
   before('chainring', 'chain');          // 链条要绕过牙盘
   before('rear-wheel', 'chain');         // 也要绕过飞轮
+  before('caliper-front', 'front-wheel'); // 卡钳先在座上，碟片才有来令片可穿
+  before('caliper-rear', 'rear-wheel');   // 后轮同一条出厂顺序
 });
 
 test('needs 成环时抛错并点名是谁在互相等', () => {

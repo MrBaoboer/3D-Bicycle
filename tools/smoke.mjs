@@ -234,6 +234,28 @@ async function run(viewport, label, port) {
     mono && build[0].on === 0 && build[build.length - 1].on === 27,
     `起 ${build[0]?.on} → 终 ${build[build.length - 1]?.on} · 单调 ${mono}`);
 
+  // ── 步序尊重 needs：每一件进场那一步，它声明的前置件都已在车上 ──
+  // verify 只证依赖图无环（合法序存在），走到这条才算证明课程排的就是合法序。
+  // 同一步进场算满足 —— 牙盘与右曲柄是连成一件上车的。
+  const order = await page.evaluate(() => {
+    const at = new Map();
+    window.__engine.steps.forEach((s, i) => (s.installs ?? []).forEach((id) => at.set(id, i)));
+    const bad = [];
+    let edges = 0;
+    for (const p of window.__ctx.bom.parts) {
+      for (const n of p.needs ?? []) {
+        edges += 1;
+        const me = at.get(p.id), dep = at.get(n);
+        if (me !== undefined && dep !== undefined && dep > me) {
+          bad.push(`${p.id}（第 ${me} 步）早于它需要的 ${n}（第 ${dep} 步）`);
+        }
+      }
+    }
+    return { bad, edges };
+  });
+  check(`${label}-步序`, '每一件进场时它的前置件都已在车上',
+    order.bad.length === 0, order.bad.join('；') || `${order.edges} 条前置关系全部按序`);
+
   // ── 「下一步」一下只演一件 ──
   const oneAtATime = await page.evaluate(async () => {
     const e = window.__engine;
