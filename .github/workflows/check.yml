@@ -36,7 +36,10 @@ jobs:
 
   smoke:
     name: 冒烟
-    if: github.event_name != 'pull_request'
+    # Dependabot 那条合并 PR 是要在远端直接点合并的，不能只凭工具链绿灯放行 ——
+    # 依赖里唯一会真出事的是 three，而它的渲染回归只有冒烟看得见。
+    # 别的 PR 仍然不等这几分钟。
+    if: github.event_name != 'pull_request' || github.event.pull_request.user.login == 'dependabot[bot]'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
