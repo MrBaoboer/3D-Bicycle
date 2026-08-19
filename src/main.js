@@ -1,5 +1,5 @@
 /*
- * 从零装一台山地车 · 三维分步说明书
+ * 山地车组装指南 · 3D 分步交互说明书
  * Copyright © 2026 MrBaoboer
  *
  * 代码 AGPL-3.0（见 LICENSE）；课程与文案 CC BY-NC-SA 4.0；
