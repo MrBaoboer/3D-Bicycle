@@ -142,7 +142,7 @@ export function bolt(kind = 'socket', m = 5, lenMm = 12) {
   );
   g.add(helix);
 
-    g.userData.spec = { kind, m, lenMm, hex: spec.hex };
+  g.userData.spec = { kind, m, lenMm, hex: spec.hex };
   return g;
 }
 
@@ -167,7 +167,7 @@ export function hexKey(mm = 5) {
   ball.position.z = -r * 0.2;
   g.add(ball);
 
-    return g;
+  return g;
 }
 
 /** 15 mm 薄口脚踏扳手。开口在原点，柄伸向 +X */
@@ -200,7 +200,7 @@ export function pedalWrench() {
   grip.position.set(-120 * MM, 0, 0);
   g.add(grip);
 
-    return g;
+  return g;
 }
 
 const TOOL_MAKERS = {

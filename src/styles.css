@@ -24,7 +24,7 @@
 #cover {
   position: fixed;
   inset: 0;
-  z-index: 90;
+  z-index: var(--z-cover);
   display: grid;
   align-items: center;
   padding: var(--pad-top) var(--pad-right) var(--pad-bottom) var(--pad-left);

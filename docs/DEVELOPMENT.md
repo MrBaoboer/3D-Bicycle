@@ -98,7 +98,7 @@ steps/      步骤内容                        通过 ctx 取用以上全部
 | `slide` | 一自由度推入 | `begin({partId,onSeat,onAll,wrongHint,sound})` · `park(partId,u)` · `burst(partId,世界位移)` · `cancel()` · `autoSeat(partId?)` |
 | `pick` | 指到哪件问哪件 | `begin({ids?,fallback?,onHover})` · `cancel()`。只问不改，从不夺走轨道控制。由引擎统一挂，步骤只需在不想要时声明 `noPick: true` |
 | `screw` | 旋入 | `begin({fastenerId,onProgress,onTight,onWrongWay})` · `beginGroup({group,onEach,onAll})` · `cancel()` · `autoRun(id?)` · `autoRunNext()` |
-| `hud` | 界面 | `setCue()` · `setNote()` · `setTask()` · `setAlts()` · `toast()` · `tag()` · `dock()` · `sheet()` · `addSpot()` · `setBoltRow()` · `setChapters()` · `setStep()` · `readyNext()` |
+| `hud` | 界面 | `setCue()` · `setNote()` · `setAlts()` · `toast()` · `tag()` · `dock()` · `sheet()` · `addSpot()` · `setBoltRow()` · `setChapters()` · `setStep()` · `readyNext()` |
 | `sfx` | 声音 | `play(name,{gain,pitch,delay})` · `setEnabled()`。只有四种：`THREAD_TURN` `SNUG_CLICK` `SEAT_IN` `WRONG`（`WHEEL_SEAT` `POST_SEAT` 是 `SEAT_IN` 的轻重档别名） |
 | `guides` | 三维方向箭头 | `set([{pos,dir,len}])` · `clear()` |
 | `state` | 状态 | 直接读写；只有偏好落盘 |
@@ -133,7 +133,6 @@ steps/      步骤内容                        通过 ctx 取用以上全部
   cam: shot(ctx, ['handlebar'], { cam: { az: 170, el: 26 } }),
   cue: '按对角顺序拧，四颗分两轮',            // 一行纯文字，没有图标也没有 HTML
   note: { title: '为什么必须对角', spec: [['工具', '4 mm 内六角']], body: '…', foot: '…' },
-  task: { label: '取掉了', onClick(c, engine) { … } },   // 需要手动确认时才有
   enter(c, engine) { … },
   exit(c) { … },
 }

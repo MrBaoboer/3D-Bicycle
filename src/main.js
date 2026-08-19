@@ -98,7 +98,15 @@ async function main() {
   // 加载期只报两件事：读模型（占九成时间，进度条说得清）、正在架好
   await frame();
   const bike = new Bike(stage.scene);
-  await bike.load((p) => progress(p * 0.85, '正在把车搬进来'));
+  try {
+    await bike.load((p) => progress(p * 0.85, '正在把车搬进来'));
+  } catch (e) {
+    // 读不到模型多半是网络断了，不是浏览器画不了三维 —— 兜底那段 WebGL 指引在这儿全不对路
+    throw Object.assign(new Error(`模型加载失败: ${e?.message || e}`), {
+      userMsg: '整车模型没读下来',
+      userWhy: '多半是网络断了一下，刷新就好。模型有 12 MB，慢网络要多等一会儿。',
+    });
+  }
 
   const hud = new HUD(state);
   // 封面还挡着时界面不该在背后待命 —— 封面一变半透，顶栏会透出来，
@@ -208,14 +216,16 @@ async function main() {
 main().catch((e) => {
   console.error(e);
   coverMsg.hidden = false;
-  coverMsg.textContent = '三维画面没能启动';
+  coverMsg.textContent = e?.userMsg || '三维画面没能启动';
   coverMsg.classList.add('bad');
   coverAct.hidden = false;
+  const why = e?.userWhy
+    || '这一页要用 WebGL 2 画三维。刷新一次多半就好；还是不行的话，'
+    + '换 Chrome / Edge 111 以上、Safari 16.4 以上、Firefox 113 以上，'
+    + '并确认浏览器设置里没有关掉硬件加速。';
   coverAct.innerHTML = `
     <button class="btn btn-primary" id="cv-retry">重新加载</button>
-    <p class="cover-why">这一页要用 WebGL 2 画三维。刷新一次多半就好；
-      还是不行的话，换 Chrome / Edge 111 以上、Safari 16.4 以上、Firefox 113 以上，
-      并确认浏览器设置里没有关掉硬件加速。</p>`;
+    <p class="cover-why">${why}</p>`;
   coverAct.querySelector('#cv-retry').addEventListener('click', () => location.reload());
 });
 
